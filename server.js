@@ -20,111 +20,23 @@ app.get("/", (req, res) => {
   res.send("Problema Cero API activa (PRO)");
 });
 
-app.get("/test-db", async (req, res) => {
+// Ruta de diagnóstico puro de Supabase
+app.get("/debug-supabase", async (req, res) => {
   try {
-    const userId = "hernan_test_1";
+    const url = `${SUPABASE_URL}/rest/v1/usuarios?select=*`;
+    const response = await fetch(url, { headers });
 
-    let userResponse = await fetch(
-      `${SUPABASE_URL}/rest/v1/usuarios?user_id=eq.${userId}`,
-      { headers }
-    );
-
-    let userData = await userResponse.json();
-
-    if (!Array.isArray(userData)) {
-      return res.status(500).json({
-        error: "Respuesta inválida de Supabase",
-        detalle: userData
-      });
-    }
-
-    if (userData.length === 0) {
-      const insertResponse = await fetch(`${SUPABASE_URL}/rest/v1/usuarios`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          user_id: userId,
-          creditos: 5,
-          total_consultas: 0
-        })
-      });
-
-      const insertData = await insertResponse.text();
-
-      return res.json({
-        ok: true,
-        mensaje: "Usuario creado correctamente en Supabase",
-        insertData
-      });
-    }
+    const rawText = await response.text();
 
     return res.json({
-      ok: true,
-      mensaje: "Usuario ya existe en Supabase",
-      user: userData[0]
+      ok: response.ok,
+      status: response.status,
+      url,
+      raw: rawText
     });
   } catch (error) {
     return res.status(500).json({
-      error: "Error al conectar con Supabase",
-      detalle: error.message
-    });
-  }
-});
-
-app.get("/test-ai", async (req, res) => {
-  try {
-    const problem = "Tengo un negocio de ropa y no vendo";
-
-    const prompt = `
-Actúa como un Chief Product Officer (CPO) y consultor estratégico de negocios.
-
-Analiza este problema: "${problem}"
-
-Respondé con esta estructura obligatoria:
-1. DIAGNÓSTICO SIN FILTRO
-2. FUGA DE DINERO ESPECÍFICA
-3. CAUSA RAÍZ
-4. ACCIÓN OBLIGATORIA HOY
-5. PLAN DE 7 DÍAS
-6. IMPACTO REAL
-
-Reglas:
-- Nada de generalidades
-- Nada de consejos vacíos
-- Sé claro, directo y útil
-- Máximo 300 palabras
-`;
-
-    const geminiResponse = await fetch(
-      `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          contents: [
-            {
-              parts: [{ text: prompt }]
-            }
-          ]
-        })
-      }
-    );
-
-    const geminiData = await geminiResponse.json();
-
-    const diagnosticoIA =
-      geminiData?.candidates?.[0]?.content?.parts?.[0]?.text ||
-      "No se pudo generar el diagnóstico.";
-
-    return res.json({
-      ok: true,
-      diagnostico: diagnosticoIA
-    });
-  } catch (error) {
-    return res.status(500).json({
-      error: "Error en test-ai",
+      error: "Fallo en debug-supabase",
       detalle: error.message
     });
   }
@@ -138,13 +50,19 @@ app.post("/api/diagnostico", async (req, res) => {
       return res.status(400).json({ error: "Faltan datos." });
     }
 
-    // 1. Buscar usuario
-    let userResponse = await fetch(
-      `${SUPABASE_URL}/rest/v1/usuarios?user_id=eq.${userId}`,
-      { headers }
-    );
+    const userUrl = `${SUPABASE_URL}/rest/v1/usuarios?user_id=eq.${userId}`;
+    const userResponse = await fetch(userUrl, { headers });
+    const rawUserText = await userResponse.text();
 
-    let userData = await userResponse.json();
+    let userData;
+    try {
+      userData = JSON.parse(rawUserText);
+    } catch {
+      return res.status(500).json({
+        error: "Supabase no devolvió JSON válido",
+        detalle: rawUserText
+      });
+    }
 
     if (!Array.isArray(userData)) {
       return res.status(500).json({
@@ -153,7 +71,6 @@ app.post("/api/diagnostico", async (req, res) => {
       });
     }
 
-    // 2. Si no existe, lo creamos
     if (userData.length === 0) {
       const createResponse = await fetch(`${SUPABASE_URL}/rest/v1/usuarios`, {
         method: "POST",
@@ -165,95 +82,20 @@ app.post("/api/diagnostico", async (req, res) => {
         })
       });
 
-      const createText = await createResponse.text();
+      const createRaw = await createResponse.text();
 
-      // Volver a consultar
-      userResponse = await fetch(
-        `${SUPABASE_URL}/rest/v1/usuarios?user_id=eq.${userId}`,
-        { headers }
-      );
-
-      userData = await userResponse.json();
-
-      if (!Array.isArray(userData) || userData.length === 0) {
-        return res.status(500).json({
-          error: "No se pudo crear o recuperar el usuario en Supabase",
-          detalle: createText
-        });
-      }
+      return res.status(500).json({
+        error: "Usuario no existía; intento de creación realizado",
+        detalle: createRaw
+      });
     }
 
     const user = userData[0];
 
-    if (typeof user.creditos !== "number") {
-      return res.status(500).json({
-        error: "El usuario no tiene un campo 'creditos' válido",
-        detalle: user
-      });
-    }
-
-    if (user.creditos <= 0) {
-      return res.status(403).json({
-        error: "Sin créditos disponibles"
-      });
-    }
-
-    const prompt = `
-Actúa como un Chief Product Officer (CPO) y consultor estratégico de negocios.
-
-Analiza este problema: "${problem}"
-
-Respondé con esta estructura obligatoria:
-1. DIAGNÓSTICO SIN FILTRO
-2. FUGA DE DINERO ESPECÍFICA
-3. CAUSA RAÍZ
-4. ACCIÓN OBLIGATORIA HOY
-5. PLAN DE 7 DÍAS
-6. IMPACTO REAL
-
-Reglas:
-- Nada de generalidades
-- Nada de consejos vacíos
-- Sé claro, directo y útil
-- Máximo 300 palabras
-`;
-
-    const geminiResponse = await fetch(
-      `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          contents: [
-            {
-              parts: [{ text: prompt }]
-            }
-          ]
-        })
-      }
-    );
-
-    const geminiData = await geminiResponse.json();
-
-    const diagnosticoIA =
-      geminiData?.candidates?.[0]?.content?.parts?.[0]?.text ||
-      "No se pudo generar el diagnóstico.";
-
-    await fetch(`${SUPABASE_URL}/rest/v1/usuarios?user_id=eq.${userId}`, {
-      method: "PATCH",
-      headers,
-      body: JSON.stringify({
-        creditos: user.creditos - 1,
-        total_consultas: (user.total_consultas || 0) + 1
-      })
-    });
-
     return res.json({
       ok: true,
-      diagnostico: diagnosticoIA,
-      creditos_restantes: user.creditos - 1
+      mensaje: "Usuario leído correctamente",
+      user
     });
   } catch (error) {
     return res.status(500).json({
