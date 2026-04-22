@@ -32,7 +32,7 @@ app.post("/api/diagnostico", async (req, res) => {
     }
 
     // 1. Buscar usuario
-    let userResponse = await fetch(`${SUPABASE_URL}/rest/v1/usuarios_creditos?user_id=eq.${userId}`, {
+    let userResponse = await fetch(`${SUPABASE_URL}/rest/v1/usuarios?user_id=eq.${userId}`, {
       headers
     });
 
@@ -40,7 +40,7 @@ app.post("/api/diagnostico", async (req, res) => {
 
     // 2. Crear usuario si no existe
     if (userData.length === 0) {
-      await fetch(`${SUPABASE_URL}/rest/v1/usuarios_creditos`, {
+      await fetch(`${SUPABASE_URL}/rest/v1/usuarios`, {
         method: "POST",
         headers,
         body: JSON.stringify({
@@ -63,7 +63,7 @@ app.post("/api/diagnostico", async (req, res) => {
     }
 
     // 4. Restar crédito
-    await fetch(`${SUPABASE_URL}/rest/v1/usuarios_creditos?user_id=eq.${userId}`, {
+    await fetch(`${SUPABASE_URL}/rest/v1/usuarios?user_id=eq.${userId}`, {
       method: "PATCH",
       headers,
       body: JSON.stringify({
