@@ -8,6 +8,7 @@ app.use(express.json());
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_KEY;
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
 const headers = {
   apikey: SUPABASE_KEY,
@@ -20,14 +21,15 @@ app.get("/", (req, res) => {
   res.send("Problema Cero API activa (PRO)");
 });
 
-// 🔥 TEST DE BASE DE DATOS
+// Test de base de datos
 app.get("/test-db", async (req, res) => {
   try {
     const userId = "hernan_test_1";
 
-    let userResponse = await fetch(`${SUPABASE_URL}/rest/v1/usuarios?user_id=eq.${userId}`, {
-      headers
-    });
+    let userResponse = await fetch(
+      `${SUPABASE_URL}/rest/v1/usuarios?user_id=eq.${userId}`,
+      { headers }
+    );
 
     let userData = await userResponse.json();
 
@@ -54,7 +56,6 @@ app.get("/test-db", async (req, res) => {
       mensaje: "Usuario ya existe en Supabase",
       user: userData[0]
     });
-
   } catch (error) {
     return res.status(500).json({
       error: "Error al conectar con Supabase",
@@ -63,7 +64,7 @@ app.get("/test-db", async (req, res) => {
   }
 });
 
-// 🔥 DIAGNÓSTICO CON CRÉDITOS
+// Diagnóstico con créditos + Gemini
 app.post("/api/diagnostico", async (req, res) => {
   try {
     const { problem, userId } = req.body;
@@ -72,9 +73,10 @@ app.post("/api/diagnostico", async (req, res) => {
       return res.status(400).json({ error: "Faltan datos." });
     }
 
-    let userResponse = await fetch(`${SUPABASE_URL}/rest/v1/usuarios?user_id=eq.${userId}`, {
-      headers
-    });
+    let userResponse = await fetch(
+      `${SUPABASE_URL}/rest/v1/usuarios?user_id=eq.${userId}`,
+      { headers }
+    );
 
     let userData = await userResponse.json();
 
@@ -98,6 +100,49 @@ app.post("/api/diagnostico", async (req, res) => {
       });
     }
 
+    const prompt = `
+Actúa como un Chief Product Officer (CPO) y consultor estratégico de negocios.
+
+Analiza este problema: "${problem}"
+
+Respondé con esta estructura obligatoria:
+1. DIAGNÓSTICO SIN FILTRO
+2. FUGA DE DINERO ESPECÍFICA
+3. CAUSA RAÍZ
+4. ACCIÓN OBLIGATORIA HOY
+5. PLAN DE 7 DÍAS
+6. IMPACTO REAL
+
+Reglas:
+- Nada de generalidades
+- Nada de consejos vacíos
+- Sé claro, directo y útil
+- Máximo 300 palabras
+`;
+
+    const geminiResponse = await fetch(
+      `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [{ text: prompt }]
+            }
+          ]
+        })
+      }
+    );
+
+    const geminiData = await geminiResponse.json();
+
+    const diagnosticoIA =
+      geminiData?.candidates?.[0]?.content?.parts?.[0]?.text ||
+      "No se pudo generar el diagnóstico.";
+
     await fetch(`${SUPABASE_URL}/rest/v1/usuarios?user_id=eq.${userId}`, {
       method: "PATCH",
       headers,
@@ -109,10 +154,9 @@ app.post("/api/diagnostico", async (req, res) => {
 
     return res.json({
       ok: true,
-      mensaje: "Diagnóstico generado",
+      diagnostico: diagnosticoIA,
       creditos_restantes: userData[0].creditos - 1
     });
-
   } catch (error) {
     return res.status(500).json({
       error: "Error interno",
