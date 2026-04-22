@@ -21,7 +21,47 @@ const headers = {
 app.get("/", (req, res) => {
   res.send("Problema Cero API activa (PRO)");
 });
+app.get("/test-db", async (req, res) => {
+  try {
+    const userId = "hernan_test_1";
 
+    let userResponse = await fetch(`${SUPABASE_URL}/rest/v1/usuarios?user_id=eq.${userId}`, {
+      headers
+    });
+
+    let userData = await userResponse.json();
+
+    if (userData.length === 0) {
+      await fetch(`${SUPABASE_URL}/rest/v1/usuarios`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          user_id: userId,
+          creditos: 5,
+          total_consultas: 0
+        })
+      });
+
+      return res.json({
+        ok: true,
+        mensaje: "Usuario creado correctamente en Supabase",
+        userId
+      });
+    }
+
+    return res.json({
+      ok: true,
+      mensaje: "Usuario ya existe en Supabase",
+      user: userData[0]
+    });
+
+  } catch (error) {
+    return res.status(500).json({
+      error: "Error al conectar con Supabase",
+      detalle: error.message
+    });
+  }
+});
 // Diagnóstico con control de créditos
 app.post("/api/diagnostico", async (req, res) => {
   try {
