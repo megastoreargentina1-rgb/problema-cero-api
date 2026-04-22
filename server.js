@@ -5,11 +5,9 @@ require("dotenv").config();
 const app = express();
 app.use(cors());
 app.use(express.json());
+
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_KEY;
-
-const SUPABASE_KEY = 
-const SUPABASE_KEY = 
 
 const headers = {
   apikey: SUPABASE_KEY,
@@ -17,10 +15,12 @@ const headers = {
   "Content-Type": "application/json"
 };
 
-// Ruta test
+// Ruta base
 app.get("/", (req, res) => {
   res.send("Problema Cero API activa (PRO)");
 });
+
+// 🔥 TEST DE BASE DE DATOS
 app.get("/test-db", async (req, res) => {
   try {
     const userId = "hernan_test_1";
@@ -62,7 +62,8 @@ app.get("/test-db", async (req, res) => {
     });
   }
 });
-// Diagnóstico con control de créditos
+
+// 🔥 DIAGNÓSTICO CON CRÉDITOS
 app.post("/api/diagnostico", async (req, res) => {
   try {
     const { problem, userId } = req.body;
@@ -71,48 +72,41 @@ app.post("/api/diagnostico", async (req, res) => {
       return res.status(400).json({ error: "Faltan datos." });
     }
 
-    // 1. Buscar usuario
     let userResponse = await fetch(`${SUPABASE_URL}/rest/v1/usuarios?user_id=eq.${userId}`, {
       headers
     });
 
     let userData = await userResponse.json();
 
-    // 2. Crear usuario si no existe
     if (userData.length === 0) {
       await fetch(`${SUPABASE_URL}/rest/v1/usuarios`, {
         method: "POST",
         headers,
         body: JSON.stringify({
           user_id: userId,
-        creditos: 5,
+          creditos: 5,
           total_consultas: 0
         })
       });
 
-      userData = [{
-       creditos: 5
-      }];
+      userData = [{ creditos: 5, total_consultas: 0 }];
     }
 
-    // 3. Validar créditos
     if (userData[0].creditos <= 0) {
       return res.status(403).json({
-        error: "Sin creditos"
+        error: "Sin créditos disponibles"
       });
     }
 
-    // 4. Restar crédito
     await fetch(`${SUPABASE_URL}/rest/v1/usuarios?user_id=eq.${userId}`, {
       method: "PATCH",
       headers,
       body: JSON.stringify({
-       creditos: userData[0].creditos - 1,
+        creditos: userData[0].creditos - 1,
         total_consultas: (userData[0].total_consultas || 0) + 1
       })
     });
 
-    // 5. Respuesta (placeholder por ahora)
     return res.json({
       ok: true,
       mensaje: "Diagnóstico generado",
