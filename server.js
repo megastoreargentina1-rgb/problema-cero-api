@@ -16,12 +16,10 @@ const headers = {
   "Content-Type": "application/json"
 };
 
-// Ruta base
 app.get("/", (req, res) => {
   res.send("Problema Cero API activa (PRO)");
 });
 
-// Test de base de datos
 app.get("/test-db", async (req, res) => {
   try {
     const userId = "hernan_test_1";
@@ -64,7 +62,66 @@ app.get("/test-db", async (req, res) => {
   }
 });
 
-// Diagnóstico con créditos + Gemini
+app.get("/test-ai", async (req, res) => {
+  try {
+    const problem = "Tengo un negocio de ropa y no vendo";
+
+    const prompt = `
+Actúa como un Chief Product Officer (CPO) y consultor estratégico de negocios.
+
+Analiza este problema: "${problem}"
+
+Respondé con esta estructura obligatoria:
+1. DIAGNÓSTICO SIN FILTRO
+2. FUGA DE DINERO ESPECÍFICA
+3. CAUSA RAÍZ
+4. ACCIÓN OBLIGATORIA HOY
+5. PLAN DE 7 DÍAS
+6. IMPACTO REAL
+
+Reglas:
+- Nada de generalidades
+- Nada de consejos vacíos
+- Sé claro, directo y útil
+- Máximo 300 palabras
+`;
+
+    const geminiResponse = await fetch(
+      `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [{ text: prompt }]
+            }
+          ]
+        })
+      }
+    );
+
+    const geminiData = await geminiResponse.json();
+
+    const diagnosticoIA =
+      geminiData?.candidates?.[0]?.content?.parts?.[0]?.text ||
+      "No se pudo generar el diagnóstico.";
+
+    return res.json({
+      ok: true,
+      diagnostico: diagnosticoIA,
+      raw: geminiData
+    });
+  } catch (error) {
+    return res.status(500).json({
+      error: "Error en test-ai",
+      detalle: error.message
+    });
+  }
+});
+
 app.post("/api/diagnostico", async (req, res) => {
   try {
     const { problem, userId } = req.body;
