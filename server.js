@@ -45,20 +45,20 @@ app.post("/api/diagnostico", async (req, res) => {
         headers,
         body: JSON.stringify({
           user_id: userId,
-          creditos_disponibles: 5,
+        creditos: 5,
           total_consultas: 0
         })
       });
 
       userData = [{
-        creditos_disponibles: 5
+       creditos: 5
       }];
     }
 
     // 3. Validar créditos
-    if (userData[0].creditos_disponibles <= 0) {
+    if (userData[0].creditos <= 0) {
       return res.status(403).json({
-        error: "Sin créditos disponibles"
+        error: "Sin creditos"
       });
     }
 
@@ -67,7 +67,7 @@ app.post("/api/diagnostico", async (req, res) => {
       method: "PATCH",
       headers,
       body: JSON.stringify({
-        creditos_disponibles: userData[0].creditos_disponibles - 1,
+       creditos: userData[0].creditos - 1,
         total_consultas: (userData[0].total_consultas || 0) + 1
       })
     });
@@ -76,7 +76,7 @@ app.post("/api/diagnostico", async (req, res) => {
     return res.json({
       ok: true,
       mensaje: "Diagnóstico generado",
-      creditos_restantes: userData[0].creditos_disponibles - 1
+      creditos_restantes: userData[0].creditos - 1
     });
 
   } catch (error) {
