@@ -31,8 +31,15 @@ app.get("/test-db", async (req, res) => {
 
     let userData = await userResponse.json();
 
+    if (!Array.isArray(userData)) {
+      return res.status(500).json({
+        error: "Respuesta inválida de Supabase",
+        detalle: userData
+      });
+    }
+
     if (userData.length === 0) {
-      await fetch(`${SUPABASE_URL}/rest/v1/usuarios`, {
+      const insertResponse = await fetch(`${SUPABASE_URL}/rest/v1/usuarios`, {
         method: "POST",
         headers,
         body: JSON.stringify({
@@ -42,10 +49,12 @@ app.get("/test-db", async (req, res) => {
         })
       });
 
+      const insertData = await insertResponse.text();
+
       return res.json({
         ok: true,
         mensaje: "Usuario creado correctamente en Supabase",
-        userId
+        insertData
       });
     }
 
@@ -111,8 +120,7 @@ Reglas:
 
     return res.json({
       ok: true,
-      diagnostico: diagnosticoIA,
-      raw: geminiData
+      diagnostico: diagnosticoIA
     });
   } catch (error) {
     return res.status(500).json({
@@ -130,6 +138,7 @@ app.post("/api/diagnostico", async (req, res) => {
       return res.status(400).json({ error: "Faltan datos." });
     }
 
+    // 1. Buscar usuario
     let userResponse = await fetch(
       `${SUPABASE_URL}/rest/v1/usuarios?user_id=eq.${userId}`,
       { headers }
@@ -137,8 +146,16 @@ app.post("/api/diagnostico", async (req, res) => {
 
     let userData = await userResponse.json();
 
+    if (!Array.isArray(userData)) {
+      return res.status(500).json({
+        error: "Supabase devolvió una respuesta inesperada",
+        detalle: userData
+      });
+    }
+
+    // 2. Si no existe, lo creamos
     if (userData.length === 0) {
-      await fetch(`${SUPABASE_URL}/rest/v1/usuarios`, {
+      const createResponse = await fetch(`${SUPABASE_URL}/rest/v1/usuarios`, {
         method: "POST",
         headers,
         body: JSON.stringify({
@@ -148,10 +165,34 @@ app.post("/api/diagnostico", async (req, res) => {
         })
       });
 
-      userData = [{ creditos: 5, total_consultas: 0 }];
+      const createText = await createResponse.text();
+
+      // Volver a consultar
+      userResponse = await fetch(
+        `${SUPABASE_URL}/rest/v1/usuarios?user_id=eq.${userId}`,
+        { headers }
+      );
+
+      userData = await userResponse.json();
+
+      if (!Array.isArray(userData) || userData.length === 0) {
+        return res.status(500).json({
+          error: "No se pudo crear o recuperar el usuario en Supabase",
+          detalle: createText
+        });
+      }
     }
 
-    if (userData[0].creditos <= 0) {
+    const user = userData[0];
+
+    if (typeof user.creditos !== "number") {
+      return res.status(500).json({
+        error: "El usuario no tiene un campo 'creditos' válido",
+        detalle: user
+      });
+    }
+
+    if (user.creditos <= 0) {
       return res.status(403).json({
         error: "Sin créditos disponibles"
       });
@@ -204,15 +245,15 @@ Reglas:
       method: "PATCH",
       headers,
       body: JSON.stringify({
-        creditos: userData[0].creditos - 1,
-        total_consultas: (userData[0].total_consultas || 0) + 1
+        creditos: user.creditos - 1,
+        total_consultas: (user.total_consultas || 0) + 1
       })
     });
 
     return res.json({
       ok: true,
       diagnostico: diagnosticoIA,
-      creditos_restantes: userData[0].creditos - 1
+      creditos_restantes: user.creditos - 1
     });
   } catch (error) {
     return res.status(500).json({
