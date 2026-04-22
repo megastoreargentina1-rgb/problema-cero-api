@@ -5,9 +5,10 @@ require("dotenv").config();
 const app = express();
 app.use(cors());
 app.use(express.json());
-
-const SUPABASE_URL = const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_KEY;
+
+const SUPABASE_KEY = 
 const SUPABASE_KEY = 
 
 const headers = {
