@@ -16,73 +16,81 @@ const headers = {
   "Content-Type": "application/json"
 };
 
-function maskSecret(value) {
-  if (!value) return null;
-  const trimmed = value.trim();
-  if (trimmed.length <= 12) return `len:${trimmed.length}`;
-  return `${trimmed.slice(0, 6)}...${trimmed.slice(-4)} (len:${trimmed.length})`;
-}
-
 app.get("/", (req, res) => {
-  res.send("Problema Cero API activa (PRO)");
+  res.send("Problema Cero API activa");
 });
 
-app.get("/debug-env", async (req, res) => {
-  return res.json({
-    SUPABASE_URL,
-    SUPABASE_KEY_present: !!SUPABASE_KEY,
-    SUPABASE_KEY_masked: maskSecret(SUPABASE_KEY),
-    GEMINI_API_KEY_present: !!GEMINI_API_KEY,
-    GEMINI_API_KEY_masked: maskSecret(GEMINI_API_KEY)
-  });
-});
-
-app.get("/debug-supabase", async (req, res) => {
+// ENDPOINT PRINCIPAL
+app.post("/api/diagnostico", async (req, res) => {
   try {
-    const url = `${SUPABASE_URL}/rest/v1/usuarios?select=*`;
-    const response = await fetch(url, { headers });
-    const rawText = await response.text();
+    const { problem, userId } = req.body;
 
-    return res.json({
-      ok: response.ok,
-      status: response.status,
-      url,
-      SUPABASE_KEY_masked: maskSecret(SUPABASE_KEY),
-      raw: rawText
-    });
-  } catch (error) {
-    return res.status(500).json({
-      error: "Fallo en debug-supabase",
-      detalle: error.message
-    });
-  }
-});
+    if (!problem || !userId) {
+      return res.status(400).json({ error: "Faltan datos." });
+    }
 
-app.get("/test-ai", async (req, res) => {
-  try {
-    const problem = "Tengo un negocio de ropa y no vendo";
+    // 1. Buscar usuario
+    let userRes = await fetch(
+      `${SUPABASE_URL}/rest/v1/usuarios?user_id=eq.${userId}`,
+      { headers }
+    );
 
+    let userData = await userRes.json();
+
+    // 2. Crear usuario si no existe
+    if (userData.length === 0) {
+      await fetch(`${SUPABASE_URL}/rest/v1/usuarios`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          user_id: userId,
+          creditos: 5,
+          total_consultas: 0
+        })
+      });
+
+      // volver a buscar
+      userRes = await fetch(
+        `${SUPABASE_URL}/rest/v1/usuarios?user_id=eq.${userId}`,
+        { headers }
+      );
+
+      userData = await userRes.json();
+    }
+
+    const user = userData[0];
+
+    // 3. Validar créditos
+    if (user.creditos <= 0) {
+      return res.status(403).json({
+        error: "Sin créditos disponibles"
+      });
+    }
+
+    // 4. Prompt IA
     const prompt = `
-Actúa como un Chief Product Officer (CPO) y consultor estratégico de negocios.
+Actúa como un Chief Product Officer (CPO) experto en negocios.
 
-Analiza este problema: "${problem}"
+Analiza este problema:
+"${problem}"
 
-Respondé con esta estructura obligatoria:
+Respondé con esta estructura:
+
 1. DIAGNÓSTICO SIN FILTRO
-2. FUGA DE DINERO ESPECÍFICA
+2. FUGA DE DINERO
 3. CAUSA RAÍZ
-4. ACCIÓN OBLIGATORIA HOY
-5. PLAN DE 7 DÍAS
+4. ACCIÓN HOY
+5. PLAN 7 DÍAS
 6. IMPACTO REAL
 
 Reglas:
-- Nada de generalidades
-- Nada de consejos vacíos
-- Sé claro, directo y útil
-- Máximo 300 palabras
+- Sé directo
+- Nada de motivación vacía
+- Máximo 250 palabras
 `;
 
-    const geminiResponse = await fetch(
+    // 5. Llamada a Gemini
+    const aiRes = await fetch(
       `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
       {
         method: "POST",
@@ -99,79 +107,32 @@ Reglas:
       }
     );
 
-    const geminiData = await geminiResponse.json();
+    const aiData = await aiRes.json();
 
-    const diagnosticoIA =
-      geminiData?.candidates?.[0]?.content?.parts?.[0]?.text ||
-      "No se pudo generar el diagnóstico.";
+    const diagnostico =
+      aiData?.candidates?.[0]?.content?.parts?.[0]?.text ||
+      "No se pudo generar diagnóstico.";
 
-    return res.json({
-      ok: true,
-      diagnostico: diagnosticoIA
-    });
-  } catch (error) {
-    return res.status(500).json({
-      error: "Error en test-ai",
-      detalle: error.message
-    });
-  }
-});
-
-app.post("/api/diagnostico", async (req, res) => {
-  try {
-    const { problem, userId } = req.body;
-
-    if (!problem || !userId) {
-      return res.status(400).json({ error: "Faltan datos." });
-    }
-
-    const userUrl = `${SUPABASE_URL}/rest/v1/usuarios?user_id=eq.${userId}`;
-    const userResponse = await fetch(userUrl, { headers });
-    const rawUserText = await userResponse.text();
-
-    let userData;
-    try {
-      userData = JSON.parse(rawUserText);
-    } catch {
-      return res.status(500).json({
-        error: "Supabase no devolvió JSON válido",
-        detalle: rawUserText
-      });
-    }
-
-    if (!Array.isArray(userData)) {
-      return res.status(500).json({
-        error: "Supabase devolvió una respuesta inesperada",
-        detalle: userData
-      });
-    }
-
-    if (userData.length === 0) {
-      const createResponse = await fetch(`${SUPABASE_URL}/rest/v1/usuarios`, {
-        method: "POST",
+    // 6. Descontar crédito
+    await fetch(
+      `${SUPABASE_URL}/rest/v1/usuarios?user_id=eq.${userId}`,
+      {
+        method: "PATCH",
         headers,
         body: JSON.stringify({
-          user_id: userId,
-          creditos: 5,
-          total_consultas: 0
+          creditos: user.creditos - 1,
+          total_consultas: (user.total_consultas || 0) + 1
         })
-      });
+      }
+    );
 
-      const createRaw = await createResponse.text();
-
-      return res.status(500).json({
-        error: "Usuario no existía; intento de creación realizado",
-        detalle: createRaw
-      });
-    }
-
-    const user = userData[0];
-
+    // 7. Respuesta final
     return res.json({
       ok: true,
-      mensaje: "Usuario leído correctamente",
-      user
+      diagnostico,
+      creditos_restantes: user.creditos - 1
     });
+
   } catch (error) {
     return res.status(500).json({
       error: "Error interno",
@@ -182,5 +143,5 @@ app.post("/api/diagnostico", async (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`Servidor PRO activo en puerto ${PORT}`);
+  console.log("Servidor PRO activo");
 });
