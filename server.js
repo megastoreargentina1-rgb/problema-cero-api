@@ -20,7 +20,6 @@ app.get("/", (req, res) => {
   res.send("Problema Cero API activa");
 });
 
-// ENDPOINT PRINCIPAL
 app.post("/api/diagnostico", async (req, res) => {
   try {
     const { problem, userId } = req.body;
@@ -49,7 +48,6 @@ app.post("/api/diagnostico", async (req, res) => {
         })
       });
 
-      // volver a buscar
       userRes = await fetch(
         `${SUPABASE_URL}/rest/v1/usuarios?user_id=eq.${userId}`,
         { headers }
@@ -67,26 +65,62 @@ app.post("/api/diagnostico", async (req, res) => {
       });
     }
 
-    // 4. Prompt IA
+    // 4. PROMPT PRO (ACÁ ESTÁ TODO JUNTO)
     const prompt = `
-Actúa como un Chief Product Officer (CPO) experto en negocios.
+Actúa como un Chief Product Officer (CPO) experto en negocios y crecimiento.
 
-Analiza este problema:
+Vas a analizar un negocio real con total honestidad.
+
+Problema:
 "${problem}"
 
 Respondé con esta estructura:
 
-1. DIAGNÓSTICO SIN FILTRO
-2. FUGA DE DINERO
-3. CAUSA RAÍZ
-4. ACCIÓN HOY
-5. PLAN 7 DÍAS
-6. IMPACTO REAL
+1. DIAGNÓSTICO SIN FILTRO  
+Decí la verdad sin suavizar. Si no es negocio, decilo. Si está mal enfocado, también.
+
+2. FUGA DE DINERO  
+Mostrá exactamente dónde está perdiendo tiempo, energía o dinero.
+
+3. CAUSA RAÍZ  
+Explicá el problema real detrás de todo. No lo superficial.
+
+4. ACCIÓN HOY  
+Una decisión concreta que debería tomar inmediatamente.
+
+5. PLAN 7 DÍAS  
+
+• Días 1-2:
+Contacta a tus clientes actuales. No vendas. Pregunta:
+¿Qué buscaban cuando te compraron?
+¿Qué valor encontraron en tu producto?
+¿Qué problema les resolviste realmente?
+
+• Días 3-4:
+Habla con personas que NO te compraron. Pregunta:
+¿Qué buscan en este tipo de producto?
+¿Dónde compran hoy?
+¿Qué les genera duda o freno para comprar?
+
+• Días 5-7:
+Analiza patrones reales.
+No supongas. Detecta:
+- qué valor importa de verdad
+- qué problema sí existe
+- y si tu producto lo resuelve o no
+
+6. IMPACTO REAL  
+Explicá qué cambia si hace esto bien.
 
 Reglas:
 - Sé directo
-- Nada de motivación vacía
-- Máximo 250 palabras
+- Nada de frases vacías
+- Nada de motivación genérica
+- Escribí como alguien que entiende negocios reales
+- Máximo 250-300 palabras
+
+Al final del diagnóstico agregá un cierre breve que deje claro que esto es solo una parte del problema y que hay aspectos más profundos que no se analizaron todavía.
+Debe generar curiosidad y tensión, sin vender directamente.
 `;
 
     // 5. Llamada a Gemini
@@ -126,7 +160,7 @@ Reglas:
       }
     );
 
-    // 7. Respuesta final
+    // 7. Respuesta
     return res.json({
       ok: true,
       diagnostico,
