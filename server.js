@@ -16,27 +16,102 @@ const headers = {
   "Content-Type": "application/json"
 };
 
+function maskSecret(value) {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (trimmed.length <= 12) return `len:${trimmed.length}`;
+  return `${trimmed.slice(0, 6)}...${trimmed.slice(-4)} (len:${trimmed.length})`;
+}
+
 app.get("/", (req, res) => {
   res.send("Problema Cero API activa (PRO)");
 });
 
-// Ruta de diagnóstico puro de Supabase
+app.get("/debug-env", async (req, res) => {
+  return res.json({
+    SUPABASE_URL,
+    SUPABASE_KEY_present: !!SUPABASE_KEY,
+    SUPABASE_KEY_masked: maskSecret(SUPABASE_KEY),
+    GEMINI_API_KEY_present: !!GEMINI_API_KEY,
+    GEMINI_API_KEY_masked: maskSecret(GEMINI_API_KEY)
+  });
+});
+
 app.get("/debug-supabase", async (req, res) => {
   try {
     const url = `${SUPABASE_URL}/rest/v1/usuarios?select=*`;
     const response = await fetch(url, { headers });
-
     const rawText = await response.text();
 
     return res.json({
       ok: response.ok,
       status: response.status,
       url,
+      SUPABASE_KEY_masked: maskSecret(SUPABASE_KEY),
       raw: rawText
     });
   } catch (error) {
     return res.status(500).json({
       error: "Fallo en debug-supabase",
+      detalle: error.message
+    });
+  }
+});
+
+app.get("/test-ai", async (req, res) => {
+  try {
+    const problem = "Tengo un negocio de ropa y no vendo";
+
+    const prompt = `
+Actúa como un Chief Product Officer (CPO) y consultor estratégico de negocios.
+
+Analiza este problema: "${problem}"
+
+Respondé con esta estructura obligatoria:
+1. DIAGNÓSTICO SIN FILTRO
+2. FUGA DE DINERO ESPECÍFICA
+3. CAUSA RAÍZ
+4. ACCIÓN OBLIGATORIA HOY
+5. PLAN DE 7 DÍAS
+6. IMPACTO REAL
+
+Reglas:
+- Nada de generalidades
+- Nada de consejos vacíos
+- Sé claro, directo y útil
+- Máximo 300 palabras
+`;
+
+    const geminiResponse = await fetch(
+      `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [{ text: prompt }]
+            }
+          ]
+        })
+      }
+    );
+
+    const geminiData = await geminiResponse.json();
+
+    const diagnosticoIA =
+      geminiData?.candidates?.[0]?.content?.parts?.[0]?.text ||
+      "No se pudo generar el diagnóstico.";
+
+    return res.json({
+      ok: true,
+      diagnostico: diagnosticoIA
+    });
+  } catch (error) {
+    return res.status(500).json({
+      error: "Error en test-ai",
       detalle: error.message
     });
   }
