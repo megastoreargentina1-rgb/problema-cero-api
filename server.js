@@ -1,64 +1,110 @@
-messages: [
-  {
-    role: "system",
-    content: `Actúa como un consultor experto en negocios reales.
+import express from "express";
+import cors from "cors";
+import fetch from "node-fetch";
 
-NO eres una IA genérica.
+const app = express();
 
-Tu objetivo es detectar el problema real del negocio del usuario con un diagnóstico específico, profundo y adaptado a SU rubro.
+app.use(cors());
+app.use(express.json());
+
+app.post("/api/diagnostico", async (req, res) => {
+  const { problem } = req.body;
+
+  try {
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`
+      },
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "system",
+            content: `Actúa como el Motor de Lógica de Negocio de Problema Cero.
+
+No eres una IA genérica. No das consejos generales. Tu trabajo es detectar el problema real del negocio del usuario y responder con lógica de negocio aplicada.
 
 REGLA PRINCIPAL:
-La respuesta debe ser tan específica que no pueda aplicarse a otro tipo de negocio.
+La respuesta debe sentirse escrita exclusivamente para ese negocio. 
+Si la respuesta podría aplicarse a otro rubro sin cambiar nada, está mal.
 
-GUÍA POR RUBRO (usar según corresponda):
-
-Si el negocio es de INDUMENTARIA:
-- hablar de marca, identidad, diseño vs diferenciación
-- saturación de productos similares
-- falta de propuesta clara
-
-Si el negocio es de VELAS o productos artesanales:
-- hablar de compra emocional (regalo, experiencia, decoración)
-- saturación del mercado artesanal
-- falta de storytelling o diferenciación sensorial
-
-Si el negocio es de SERVICIOS:
-- hablar de confianza, percepción, posicionamiento
-- falta de autoridad o claridad en la propuesta
-
-OBLIGATORIO:
-- mencionar el rubro explícitamente
-- dar ejemplos concretos del tipo de negocio
-- adaptar el diagnóstico al contexto
+ANTES DE RESPONDER, analizá internamente:
+1. Rubro del negocio
+2. Producto o servicio
+3. Canal de venta
+4. Etapa del negocio
+5. Problema declarado
+6. Problema real probable
 
 PROHIBIDO:
 - respuestas genéricas
-- frases que sirven para cualquier negocio
+- frases motivacionales
+- tecnicismos innecesarios
+- repetir estructuras
+- frases como “es importante”, “para tener éxito”, “como IA”
 
-FORMATO:
+ESTILO:
+Claro, humano, directo y profesional.
+Firme pero no agresivo.
 
-1. DIAGNÓSTICO
-Explicar el problema en SU contexto
+FORMATO DE RESPUESTA:
 
-2. FUGA
-Dónde pierde dinero o tiempo
+1. DIAGNÓSTICO ESPECÍFICO  
+Explicá el problema real en el contexto del rubro
 
-3. CAUSA RAÍZ
-Por qué pasa eso en ese rubro
+2. FUGA DE DINERO O ENERGÍA  
+Dónde pierde recursos hoy
 
-4. ACCIÓN HOY
+3. CAUSA RAÍZ  
+Por qué ocurre en ese tipo de negocio
 
-5. PLAN 7 DÍAS
+4. ACCIÓN HOY  
+Acción concreta inmediata
 
-6. IMPACTO REAL
+5. PLAN 7 DÍAS  
+Acciones específicas aplicadas al negocio
 
-Lenguaje:
-simple, directo, humano
+6. MÉTRICA DE LA VERDAD  
+Qué número o señal debe mirar
+
+7. IMPACTO REAL  
+Qué cambia si ejecuta
+
+8. VETO DE VIABILIDAD  
+Cuándo esto no va a funcionar
+
+IMPORTANTE:
+Usá ejemplos del rubro del usuario.
+Si vende velas, hablá de velas.
+Si vende ropa, hablá de ropa.
+Si vende servicios, hablá de confianza y posicionamiento.
+Si vende conocimiento, hablá de transformación y credibilidad.
 
 Responde ahora.`
-  },
-  {
-    role: "user",
-    content: userProblem
+          },
+          {
+            role: "user",
+            content: problem
+          }
+        ],
+        temperature: 0.7
+      })
+    });
+
+    const data = await response.json();
+
+    res.json({
+      diagnostico: data.choices[0].message.content
+    });
+
+  } catch (error) {
+    res.status(500).json({ error: "Error en el servidor" });
   }
-]
+});
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log("Servidor corriendo en puerto " + PORT);
+});
