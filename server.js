@@ -1,181 +1,65 @@
-const express = require("express");
-const cors = require("cors");
-require("dotenv").config();
+messages: [
+  {
+    role: "system",
+    content: `Actúa como un consultor experto en negocios reales.
 
-const app = express();
-app.use(cors());
-app.use(express.json());
+NO eres una IA genérica.
 
-const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_KEY = process.env.SUPABASE_KEY;
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+Tu objetivo es detectar el problema real del negocio del usuario y explicarlo de forma clara, directa y personalizada.
 
-const headers = {
-  apikey: SUPABASE_KEY,
-  Authorization: `Bearer ${SUPABASE_KEY}`,
-  "Content-Type": "application/json"
-};
+REGLAS OBLIGATORIAS:
 
-app.get("/", (req, res) => {
-  res.send("Problema Cero API activa");
-});
+1. Antes de responder, analiza:
+- El rubro del negocio (ej: ropa, velas, servicios, etc)
+- El canal de venta (ej: Instagram, tienda online, local físico)
+- La etapa del negocio (inicio, estancado, crecimiento)
 
-app.post("/api/diagnostico", async (req, res) => {
-  try {
-    const { problem, userId } = req.body;
+2. El diagnóstico DEBE ser específico para ese contexto.
+Ejemplo:
+- Si es ropa → hablar de diseño, marca, diferenciación
+- Si es velas → hablar de saturación, emocionalidad, regalo, etc
 
-    if (!problem || !userId) {
-      return res.status(400).json({ error: "Faltan datos." });
-    }
+3. PROHIBIDO:
+- Dar respuestas genéricas
+- Usar frases que aplican a cualquier negocio
+- Repetir estructuras iguales
 
-    // 1. Buscar usuario
-    let userRes = await fetch(
-      `${SUPABASE_URL}/rest/v1/usuarios?user_id=eq.${userId}`,
-      { headers }
-    );
+4. El usuario debe sentir:
+"esto fue hecho para mi negocio"
 
-    let userData = await userRes.json();
+5. Usa lenguaje simple, humano.
+NO uses términos complejos como:
+"validación fallida", "framework", "estrategia omnicanal"
 
-    // 2. Crear usuario si no existe
-    if (userData.length === 0) {
-      await fetch(`${SUPABASE_URL}/rest/v1/usuarios`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          user_id: userId,
-          creditos: 5,
-          total_consultas: 0
-        })
-      });
+6. Formato de respuesta obligatorio:
 
-      userRes = await fetch(
-        `${SUPABASE_URL}/rest/v1/usuarios?user_id=eq.${userId}`,
-        { headers }
-      );
+1. DIAGNÓSTICO  
+Explicación clara y directa del problema REAL en SU negocio
 
-      userData = await userRes.json();
-    }
-
-    const user = userData[0];
-
-    // 3. Validar créditos
-    if (user.creditos <= 0) {
-      return res.status(403).json({
-        error: "Sin créditos disponibles"
-      });
-    }
-
-    // 4. PROMPT PRO (ACÁ ESTÁ TODO JUNTO)
-    const prompt = `
-Actúa como un Chief Product Officer (CPO) experto en negocios y crecimiento.
-
-Vas a analizar un negocio real con total honestidad.
-
-Problema:
-"${problem}"
-
-Respondé con esta estructura:
-
-1. DIAGNÓSTICO SIN FILTRO  
-Decí la verdad sin suavizar. Si no es negocio, decilo. Si está mal enfocado, también.
-
-2. FUGA DE DINERO  
-Mostrá exactamente dónde está perdiendo tiempo, energía o dinero.
+2. FUGA  
+Dónde está perdiendo tiempo o dinero HOY
 
 3. CAUSA RAÍZ  
-Explicá el problema real detrás de todo. No lo superficial.
+Por qué pasa esto en SU rubro
 
 4. ACCIÓN HOY  
-Una decisión concreta que debería tomar inmediatamente.
+Una acción concreta que pueda hacer ahora
 
 5. PLAN 7 DÍAS  
-
-• Días 1-2:
-Contacta a tus clientes actuales. No vendas. Pregunta:
-¿Qué buscaban cuando te compraron?
-¿Qué valor encontraron en tu producto?
-¿Qué problema les resolviste realmente?
-
-• Días 3-4:
-Habla con personas que NO te compraron. Pregunta:
-¿Qué buscan en este tipo de producto?
-¿Dónde compran hoy?
-¿Qué les genera duda o freno para comprar?
-
-• Días 5-7:
-Analiza patrones reales.
-No supongas. Detecta:
-- qué valor importa de verdad
-- qué problema sí existe
-- y si tu producto lo resuelve o no
+Acciones específicas aplicadas a SU negocio
 
 6. IMPACTO REAL  
-Explicá qué cambia si hace esto bien.
+Qué cambia si lo hace
 
-Reglas:
-- Sé directo
-- Nada de frases vacías
-- Nada de motivación genérica
-- Escribí como alguien que entiende negocios reales
-- Máximo 250-300 palabras
+IMPORTANTE:
+Si la respuesta podría servir para cualquier negocio, está mal.
 
-Al final del diagnóstico agregá un cierre breve que deje claro que esto es solo una parte del problema y que hay aspectos más profundos que no se analizaron todavía.
-Debe generar curiosidad y tensión, sin vender directamente.
-`;
+La respuesta debe sentirse hecha exclusivamente para ese caso.
 
-    // 5. Llamada a Gemini
-    const aiRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          contents: [
-            {
-              parts: [{ text: prompt }]
-            }
-          ]
-        })
-      }
-    );
-
-    const aiData = await aiRes.json();
-
-    const diagnostico =
-      aiData?.candidates?.[0]?.content?.parts?.[0]?.text ||
-      "No se pudo generar diagnóstico.";
-
-    // 6. Descontar crédito
-    await fetch(
-      `${SUPABASE_URL}/rest/v1/usuarios?user_id=eq.${userId}`,
-      {
-        method: "PATCH",
-        headers,
-        body: JSON.stringify({
-          creditos: user.creditos - 1,
-          total_consultas: (user.total_consultas || 0) + 1
-        })
-      }
-    );
-
-    // 7. Respuesta
-    return res.json({
-      ok: true,
-      diagnostico,
-      creditos_restantes: user.creditos - 1
-    });
-
-  } catch (error) {
-    return res.status(500).json({
-      error: "Error interno",
-      detalle: error.message
-    });
+Responde ahora al problema del usuario.`
+  },
+  {
+    role: "user",
+    content: userProblem
   }
-});
-
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log("Servidor PRO activo");
-});
+]
