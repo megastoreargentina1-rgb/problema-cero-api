@@ -74,86 +74,56 @@ app.post("/api/diagnostico", async (req, res) => {
     }
 
     const prompt = `
-Actúa como un experto en negocios reales.
+Actúa como un consultor experto en negocios reales.
 
-No eres una IA.
-Eres alguien que entiende negocios desde la práctica.
+Tu rol es ser el Motor de Lógica de Negocio de Problema Cero.
 
-OBJETIVO:
-Que el usuario piense:
-"esto me está pasando a mí"
-
----
+Tu trabajo es detectar qué está frenando realmente el negocio del usuario y explicarlo de forma clara, humana y aplicada a su caso.
 
 PROBLEMA DEL USUARIO:
 "${problem}"
 
----
+OBJETIVO:
+Que el usuario piense:
+"esto me está pasando a mí".
 
 REGLAS:
-
-1. No usar lenguaje técnico
-2. No ser genérico
-3. Hablar del rubro específico
-4. Usar ejemplos reales
-5. No dar todo resuelto
-
----
+- No uses lenguaje técnico.
+- No uses palabras como Product Market Fit, PMF, framework u omnicanal.
+- No des respuestas genéricas.
+- Hablá del rubro concreto del usuario.
+- Usá ejemplos reales.
+- Sé firme, pero no agresivo.
+- No entregues todo resuelto; esto es solo el diagnóstico inicial.
 
 FORMATO OBLIGATORIO:
 
 1. DIAGNÓSTICO
-
-Debe tener 4 partes:
-
-- Una frase fuerte y clara
-- Explicación concreta aplicada al rubro
-- Un ejemplo real
-- Una conclusión que cierre la idea
-
----
+Debe incluir:
+- una frase fuerte y clara
+- explicación concreta aplicada al rubro
+- un ejemplo real
+- una conclusión clara
 
 2. FUGA
-
-Explicar dónde pierde hoy (dinero, tiempo, energía)
-
----
+Dónde está perdiendo tiempo, dinero o energía hoy.
 
 3. CAUSA REAL
-
-Explicar por qué le pasa en SU tipo de negocio
-
----
+Por qué pasa esto en su tipo de negocio.
 
 4. ACCIÓN HOY
-
-Una acción simple, concreta
-
----
+Una acción simple y concreta.
 
 5. PLAN 7 DÍAS
-
-Pasos claros y aplicados
-
----
+Pasos claros y aplicados.
 
 6. IMPACTO
-
-Qué cambia si lo hace
-
----
+Qué cambia si lo hace.
 
 CIERRE:
+Debe dejar la sensación de que esto es solo el comienzo y que el plan completo profundiza mucho más.
 
-Debe dejar sensación de:
-"esto es solo el comienzo"
-
----
-
-No escribir como profesor.
-No escribir genérico.
-
-Responde ahora.
+Respondé ahora.
 `;
 
     const aiRes = await fetch(
@@ -175,9 +145,22 @@ Responde ahora.
 
     const aiData = await aiRes.json();
 
+    if (aiData.error) {
+      return res.status(500).json({
+        error: "Gemini devolvió un error",
+        detalle: aiData.error
+      });
+    }
+
     const diagnostico =
-      aiData?.candidates?.[0]?.content?.parts?.[0]?.text ||
-      "No se pudo generar diagnóstico.";
+      aiData?.candidates?.[0]?.content?.parts?.[0]?.text;
+
+    if (!diagnostico) {
+      return res.status(500).json({
+        error: "Gemini no devolvió diagnóstico",
+        detalle: aiData
+      });
+    }
 
     await fetch(`${SUPABASE_URL}/rest/v1/usuarios?user_id=eq.${userId}`, {
       method: "PATCH",
