@@ -22,7 +22,9 @@ app.get("/", (req, res) => {
 });
 
 app.post("/api/diagnostico", async (req, res) => {
-  res.json({ error: "Servidor en actualización. Volvé a probar en unos minutos." });
+  res.json({
+    diagnostico: "Esto es una prueba. El server nuevo está funcionando correctamente."
+  });
 });
 
 const PORT = process.env.PORT || 3000;
