@@ -18,15 +18,9 @@ async function llamarGemini(prompt) {
     `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
     {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        contents: [
-          {
-            parts: [{ text: prompt }]
-          }
-        ]
+        contents: [{ parts: [{ text: prompt }] }]
       })
     }
   );
@@ -37,60 +31,42 @@ async function llamarGemini(prompt) {
     throw new Error(JSON.stringify(data.error));
   }
 
-  return (
-    data?.candidates?.[0]?.content?.parts?.[0]?.text ||
-    "No se pudo generar respuesta."
-  );
+  return data?.candidates?.[0]?.content?.parts?.[0]?.text || "No se pudo generar respuesta.";
 }
 
 app.post("/api/diagnostico", async (req, res) => {
   try {
     const { problem } = req.body;
 
-    if (!problem) {
-      return res.status(400).json({
-        error: "Falta el problema del negocio."
-      });
-    }
-
     const prompt = `
-Actúa como el Motor de Lógica de Negocio de Problema Cero.
+Actuá como un estratega de negocios experto.
 
 Analizá este caso real:
 ${problem}
 
-Respondé con:
+Reglas:
+- No seas genérico
+- No inventes nichos
+- Si el usuario menciona un nicho, profundizalo
+- Hablá del negocio real
+- Sé claro y directo
 
+Estructura:
 1. DIAGNÓSTICO
 2. FUGA
 3. CAUSA REAL
 4. ACCIÓN HOY
-5. PLAN 7 DÍAS
-6. IMPACTO
+5. IMPACTO
 
-Reglas:
-- No seas genérico.
-- Hablá del rubro concreto del usuario.
-- No inventes nichos que el usuario no mencionó.
-- Usá ejemplos reales del negocio mencionado.
-- Sé claro, humano y directo.
-- Esto es diagnóstico inicial, no plan completo.
-
-Respondé ahora.
+Esto es diagnóstico inicial.
 `;
 
     const diagnostico = await llamarGemini(prompt);
 
-    return res.json({
-      ok: true,
-      diagnostico
-    });
+    res.json({ ok: true, diagnostico });
 
   } catch (error) {
-    return res.status(500).json({
-      error: "Error generando diagnóstico",
-      detalle: error.message
-    });
+    res.status(500).json({ error: "Error diagnóstico", detalle: error.message });
   }
 });
 
@@ -98,117 +74,108 @@ app.post("/api/plan", async (req, res) => {
   try {
     const { problem, respuestas } = req.body;
 
-    if (!problem) {
-      return res.status(400).json({
-        error: "Falta el problema del negocio."
-      });
-    }
-
     const promptPlan = `
-Actúa como un estratega de negocios experto.
+Actuá como un equipo de consultores senior (negocio, marketing, ventas y ejecución).
 
-Esto es el PRODUCTO PAGO de Problema Cero.
-No es un diagnóstico general.
-Es un plan aplicado a ESTE negocio real.
-
-CASO REAL DEL USUARIO:
+CASO REAL:
 ${problem}
 
-RESPUESTAS DEL USUARIO:
+RESPUESTAS:
 ${JSON.stringify(respuestas || {}, null, 2)}
 
-REGLA PRINCIPAL:
-Debes respetar exactamente el rubro y el contexto del usuario.
+REGLA MADRE:
+Trabajá SOLO con lo que el usuario dijo.
+- No inventes nichos
+- No cambies el rubro
+- Si hay un nicho específico, profundizalo
+- Si no lo hay, no inventes uno
+
+FORMA DE PENSAR (OBLIGATORIO):
+Antes de responder, analizá:
+- qué está haciendo
+- por qué no vende
+- dónde se rompe la conversión
+- qué cree que funciona pero no funciona
+
+Luego decidí:
+- cuál es el problema principal
+- qué se ataca primero
+
+CRITERIO:
+Esto debe sentirse como una consultoría paga real.
 
 PROHIBIDO:
-- Inventar nichos que el usuario no mencionó.
-- Cambiar el negocio real por otro ejemplo.
-- Usar ejemplos de juegos de mesa, gamers, restaurantes, coaches u otros rubros si el usuario no los nombró.
-- Decir “para este plan vamos a enfocarnos en...” inventando un público nuevo.
-- Dar consejos genéricos que podrían servir para cualquier negocio.
+- contenido genérico
+- frases de marketing básicas
+- teoría sin acción
+- suavizar errores
+- hablar como IA
 
-SI EL NEGOCIO ES DE REMERAS:
-Hablá de remeras, indumentaria, diseños, identidad, estilo, calidad percibida, uso real, marca, contenido, redes, Meta Ads, cliente comprador de ropa y decisión de compra.
+OBLIGATORIO:
+- bajar a ejemplos concretos
+- criticar con claridad
+- explicar por qué no funciona
+- dar acciones ejecutables
 
-SI EL NEGOCIO ES DE VELAS:
-Hablá de velas, aromas, ambiente, regalo, decoración, experiencia sensorial, bienestar, ritual, hogar y percepción emocional.
-
-SI EL NEGOCIO ES DE SERVICIOS:
-Hablá de confianza, autoridad, prueba social, claridad de oferta, objeciones y proceso de venta.
-
-OBJETIVO:
-Que el usuario sienta que recibió un plan real, claro, aplicable y específico para su negocio.
-
-Estructura obligatoria:
+ESTRUCTURA:
 
 1. DIAGNÓSTICO DIRECTO
-Una frase clara que destruya la falsa creencia del usuario.
+Una frase que rompa su idea actual.
 
-2. PROBLEMA REAL
-Qué está pasando en SU negocio concreto.
+2. RADIOGRAFÍA DEL NEGOCIO
+Qué está pasando realmente y por qué no convierte.
 
-3. CLIENTE IDEAL REAL
-Definí quién debería ser su cliente, pero siempre dentro del rubro real del usuario.
-No inventes un nicho raro. Si no hay datos suficientes, proponé 2 o 3 opciones posibles dentro del mismo rubro.
+3. ERROR PRINCIPAL (UNO SOLO)
+Elegí el problema más importante y explicalo.
 
-4. ERRORES CLAVE
-Qué está haciendo mal hoy.
+4. ERRORES SECUNDARIOS
+Lista clara de lo que también está mal.
 
-5. PLAN DE ACCIÓN 7 DÍAS
-Día 1:
-Día 2:
-Día 3:
-Día 4:
-Día 5:
-Día 6:
-Día 7:
+5. EJEMPLOS REALES
+Bajalo a situaciones concretas (contenido, ventas, producto).
 
-6. CONTENIDO LISTO
-3 ideas de contenido listas para publicar, siempre aplicadas al rubro real del usuario.
+6. PRIORIDAD ABSOLUTA
+Qué tiene que cambiar primero y por qué.
 
-7. MENSAJES DE VENTA
-2 mensajes listos para usar, aplicados al producto real del usuario.
+7. PLAN 7 DÍAS
+Día por día con acciones reales.
 
-8. QUÉ ELIMINAR YA
-Qué debe dejar de hacer inmediatamente.
+8. CONTENIDO LISTO
+3 piezas específicas aplicadas a su negocio.
 
-9. PLAN A 30 DÍAS
-Qué hacer durante el mes para ordenar y escalar.
+9. MENSAJES DE VENTA
+2 textos listos para usar.
 
-10. MÉTRICA DE LA VERDAD
-Qué señal concreta debe mirar para saber si está mejorando.
+10. QUÉ ELIMINAR YA
 
-11. CONCLUSIÓN FUERTE
-Cierre directo y claro.
+11. PLAN 30 DÍAS
 
-Tono:
-- directo
-- humano
-- profesional
-- específico
-- sin relleno
-- sin teoría innecesaria
+12. MÉTRICA REAL
 
-Respondé ahora con el plan completo.
+13. CONCLUSIÓN FUERTE
+
+TONO:
+Directo.
+Profesional.
+Claro.
+Incómodo cuando haga falta.
+Sin relleno.
+
+Esto no es contenido.
+Es una decisión.
 `;
 
     const plan = await llamarGemini(promptPlan);
 
-    return res.json({
-      ok: true,
-      plan
-    });
+    res.json({ ok: true, plan });
 
   } catch (error) {
-    return res.status(500).json({
-      error: "Error generando plan",
-      detalle: error.message
-    });
+    res.status(500).json({ error: "Error plan", detalle: error.message });
   }
 });
 
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
-  console.log("Servidor Problema Cero activo en puerto " + PORT);
+  console.log("Servidor Problema Cero activo");
 });
