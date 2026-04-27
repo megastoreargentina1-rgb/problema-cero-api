@@ -1,217 +1,127 @@
-const express = require("express");
-const cors = require("cors");
-require("dotenv").config();
+import express from "express";
+import fetch from "node-fetch";
+import cors from "cors";
 
 const app = express();
-
 app.use(cors());
 app.use(express.json());
 
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
-app.get("/", (req, res) => {
-  res.send("Problema Cero API activa");
-});
+// 🔥 DIAGNÓSTICO GRATIS
+app.post("/api/diagnostico", async (req, res) => {
+  const { problem, userId } = req.body;
 
-async function llamarGemini(prompt) {
-  const aiRes = await fetch(
-    `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
-    {
+  const prompt = `
+Actúa como un estratega de negocios.
+
+Analizá este problema:
+
+${problem}
+
+Dame un diagnóstico claro, directo y fácil de entender.
+No más de 200 palabras.
+`;
+
+  try {
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${OPENAI_API_KEY}`,
       },
       body: JSON.stringify({
-        contents: [
-          {
-            parts: [{ text: prompt }]
-          }
-        ]
-      })
-    }
-  );
+        model: "gpt-4o-mini",
+        messages: [{ role: "user", content: prompt }],
+      }),
+    });
 
-  const data = await aiRes.json();
-
-  if (data.error) {
-    throw new Error(JSON.stringify(data.error));
-  }
-
-  return (
-    data?.candidates?.[0]?.content?.parts?.[0]?.text ||
-    "No se pudo generar respuesta."
-  );
-}
-
-app.post("/api/diagnostico", async (req, res) => {
-  try {
-    const { problem } = req.body;
-
-    if (!problem) {
-      return res.status(400).json({
-        error: "Falta el problema del negocio."
-      });
-    }
-
-    const prompt = `
-Actúa como un consultor experto en negocios reales.
-
-Tu rol es ser el Motor de Lógica de Negocio de Problema Cero.
-
-PROBLEMA DEL USUARIO:
-"${problem}"
-
-OBJETIVO:
-Que el usuario piense:
-"esto me está pasando a mí".
-
-REGLAS:
-- No uses lenguaje técnico.
-- No seas genérico.
-- Hablá del rubro concreto del usuario.
-- Usá ejemplos reales.
-- Sé firme, pero no agresivo.
-- Esto es solo el diagnóstico inicial, no el plan completo.
-
-FORMATO:
-
-1. DIAGNÓSTICO
-Debe incluir:
-- una frase fuerte y clara
-- explicación aplicada al rubro
-- un ejemplo real
-- una conclusión clara
-
-2. FUGA
-Dónde está perdiendo tiempo, dinero o energía.
-
-3. CAUSA REAL
-Por qué pasa esto en ese tipo de negocio.
-
-4. ACCIÓN HOY
-Una acción simple y concreta.
-
-5. PLAN 7 DÍAS
-Pasos claros y aplicados.
-
-6. IMPACTO
-Qué cambia si lo hace.
-
-CIERRE:
-Dejá claro que esto es solo el comienzo y que el plan completo profundiza mucho más.
-
-Respondé ahora.
-`;
-
-    const diagnostico = await llamarGemini(prompt);
-
-    return res.json({
-      ok: true,
-      diagnostico
+    const data = await response.json();
+    res.json({
+      diagnostico: data.choices?.[0]?.message?.content || "Error",
     });
   } catch (error) {
-    return res.status(500).json({
-      error: "Error generando diagnóstico",
-      detalle: error.message
-    });
+    res.json({ error: "No se pudo generar diagnóstico" });
   }
 });
 
+// 💣 PLAN PRO (EL PRODUCTO QUE SE VENDE)
 app.post("/api/plan", async (req, res) => {
-  try {
-    const { problem, respuestas } = req.body;
+  const { problem, respuestas } = req.body;
 
-    if (!problem) {
-      return res.status(400).json({
-        error: "Falta el problema del negocio."
-      });
-    }
+  const prompt = `
+Actúa como un estratega de negocios experto.
 
-    const promptPlan = `
-Actúa como un consultor experto en negocios reales.
+Este no es un análisis general.
+Es un plan aplicado a ESTE negocio.
 
-El usuario ya recibió un diagnóstico inicial.
-Ahora necesita el PLAN COMPLETO aplicado a su negocio.
+Caso:
+Problema: ${problem}
+Respuestas: ${JSON.stringify(respuestas)}
 
-PROBLEMA DEL USUARIO:
-"${problem}"
+NO uses ejemplos genéricos.
+NO hables en teoría.
+NO des consejos amplios.
 
-RESPUESTAS ADICIONALES:
-${JSON.stringify(respuestas || {}, null, 2)}
+Quiero que hables directo, como si fueras un consultor caro.
 
-OBJETIVO:
-Crear un plan claro, accionable y personalizado.
-Esto es el producto pago, por lo tanto debe sentirse mucho más profundo que el diagnóstico inicial.
+Estructura obligatoria:
 
-REGLAS:
-- No seas genérico.
-- Hablá del rubro específico.
-- Usá ejemplos concretos.
-- No uses lenguaje técnico innecesario.
-- No des teoría.
-- Decí exactamente qué hacer.
-- El usuario debe sentir que recibió un plan real, no una respuesta de IA.
+1. DIAGNÓSTICO DIRECTO
+Destruir la falsa creencia del usuario en una frase clara.
 
-FORMATO OBLIGATORIO:
+2. PROBLEMA REAL
+Explicar qué está pasando en SU negocio, no en general.
 
-1. PROBLEMA REAL PROFUNDO
-Explicá con más profundidad qué está frenando el negocio.
+3. CLIENTE IDEAL REAL
+Definir quién es su cliente basado en el caso.
 
-2. BLOQUEO PRINCIPAL
-Definí un solo bloqueo central que debe resolver primero.
+4. ERRORES CLAVE
+Lista concreta de lo que está haciendo mal.
 
-3. PRIORIDAD ABSOLUTA
-Decí qué debe hacer primero y por qué.
+5. PLAN DE ACCIÓN (7 DÍAS)
+Día por día, acciones ejecutables.
 
-4. QUÉ CAMBIAR
-Mostrá qué parte del negocio debe modificar.
+6. CONTENIDO LISTO
+3 ideas de contenido que pueda publicar mañana.
 
-5. QUÉ ELIMINAR
-Decí qué acciones debe dejar de hacer porque no ayudan.
+7. MENSAJES DE VENTA
+2 mensajes listos para usar.
 
-6. PLAN DE ACCIÓN 7 DÍAS
-Día 1:
-Día 2:
-Día 3:
-Día 4:
-Día 5:
-Día 6:
-Día 7:
+8. QUÉ ELIMINAR YA
+Qué dejar de hacer inmediatamente.
 
-7. EJEMPLOS APLICADOS
-Mostrá ejemplos concretos de contenido, mensaje, oferta o acción según su negocio.
+9. CONCLUSIÓN FUERTE
+Cerrar con impacto.
 
-8. ERRORES A EVITAR
-Lista clara de errores que lo van a mantener estancado.
-
-9. PLAN A 30 DÍAS
-Qué hacer durante el mes para consolidar el cambio.
-
-10. MÉTRICA DE LA VERDAD
-Qué señal concreta debe mirar para saber si está mejorando.
-
-11. DECISIÓN FINAL
-Cierre firme y claro.
-
-Respondé ahora con el plan completo.
+Habla directo.
+Sin relleno.
+Sin frases genéricas.
 `;
 
-    const plan = await llamarGemini(promptPlan);
+  try {
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${OPENAI_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        messages: [{ role: "user", content: prompt }],
+      }),
+    });
 
-    return res.json({
-      ok: true,
-      plan
+    const data = await response.json();
+
+    res.json({
+      plan: data.choices?.[0]?.message?.content || "Error generando plan",
     });
   } catch (error) {
-    return res.status(500).json({
-      error: "Error generando plan",
-      detalle: error.message
-    });
+    res.json({ error: "No se pudo generar el plan" });
   }
 });
 
-const PORT = process.env.PORT || 3000;
-
-app.listen(PORT, () => {
-  console.log("Servidor Problema Cero activo en puerto " + PORT);
+app.listen(3000, () => {
+  console.log("Server running on port 3000");
 });
