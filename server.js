@@ -1,127 +1,171 @@
-import express from "express";
-import fetch from "node-fetch";
-import cors from "cors";
+const express = require("express");
+const cors = require("cors");
+require("dotenv").config();
 
 const app = express();
+
 app.use(cors());
 app.use(express.json());
 
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
-// 🔥 DIAGNÓSTICO GRATIS
+app.get("/", (req, res) => {
+  res.send("Problema Cero API activa");
+});
+
+async function llamarGemini(prompt) {
+  const aiRes = await fetch(
+    `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }]
+      })
+    }
+  );
+
+  const data = await aiRes.json();
+
+  if (data.error) {
+    throw new Error(JSON.stringify(data.error));
+  }
+
+  return data?.candidates?.[0]?.content?.parts?.[0]?.text || "No se pudo generar respuesta.";
+}
+
 app.post("/api/diagnostico", async (req, res) => {
-  const { problem, userId } = req.body;
+  try {
+    const { problem } = req.body;
 
-  const prompt = `
-Actúa como un estratega de negocios.
+    if (!problem) {
+      return res.status(400).json({ error: "Falta el problema del negocio." });
+    }
 
-Analizá este problema:
+    const prompt = `
+Actúa como el Motor de Lógica de Negocio de Problema Cero.
 
+Analizá este caso:
 ${problem}
 
-Dame un diagnóstico claro, directo y fácil de entender.
-No más de 200 palabras.
+Respondé con:
+1. DIAGNÓSTICO
+2. FUGA
+3. CAUSA REAL
+4. ACCIÓN HOY
+5. PLAN 7 DÍAS
+6. IMPACTO
+
+Reglas:
+- No seas genérico.
+- Hablá del rubro concreto.
+- Usá ejemplos reales.
+- Sé claro, humano y directo.
+- Esto es diagnóstico inicial, no plan completo.
 `;
 
-  try {
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${OPENAI_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        messages: [{ role: "user", content: prompt }],
-      }),
-    });
+    const diagnostico = await llamarGemini(prompt);
 
-    const data = await response.json();
-    res.json({
-      diagnostico: data.choices?.[0]?.message?.content || "Error",
-    });
+    res.json({ ok: true, diagnostico });
+
   } catch (error) {
-    res.json({ error: "No se pudo generar diagnóstico" });
+    res.status(500).json({
+      error: "Error generando diagnóstico",
+      detalle: error.message
+    });
   }
 });
 
-// 💣 PLAN PRO (EL PRODUCTO QUE SE VENDE)
 app.post("/api/plan", async (req, res) => {
-  const { problem, respuestas } = req.body;
+  try {
+    const { problem, respuestas } = req.body;
 
-  const prompt = `
+    if (!problem) {
+      return res.status(400).json({ error: "Falta el problema del negocio." });
+    }
+
+    const promptPlan = `
 Actúa como un estratega de negocios experto.
 
-Este no es un análisis general.
+Esto es el PRODUCTO PAGO de Problema Cero.
+No es un diagnóstico general.
 Es un plan aplicado a ESTE negocio.
 
-Caso:
-Problema: ${problem}
-Respuestas: ${JSON.stringify(respuestas)}
+CASO:
+${problem}
 
-NO uses ejemplos genéricos.
-NO hables en teoría.
-NO des consejos amplios.
+RESPUESTAS DEL USUARIO:
+${JSON.stringify(respuestas || {}, null, 2)}
 
-Quiero que hables directo, como si fueras un consultor caro.
+Objetivo:
+Que el usuario sienta que recibió un plan real, claro y ejecutable.
+
+Reglas:
+- No seas genérico.
+- No uses teoría.
+- Hablá del rubro específico.
+- Usá ejemplos concretos.
+- Decí exactamente qué hacer.
+- No des frases motivacionales vacías.
 
 Estructura obligatoria:
 
 1. DIAGNÓSTICO DIRECTO
-Destruir la falsa creencia del usuario en una frase clara.
+Una frase clara que destruya la falsa creencia del usuario.
 
 2. PROBLEMA REAL
-Explicar qué está pasando en SU negocio, no en general.
+Qué está pasando en SU negocio.
 
 3. CLIENTE IDEAL REAL
-Definir quién es su cliente basado en el caso.
+Quién debería ser su cliente según el caso.
 
 4. ERRORES CLAVE
-Lista concreta de lo que está haciendo mal.
+Qué está haciendo mal.
 
-5. PLAN DE ACCIÓN (7 DÍAS)
-Día por día, acciones ejecutables.
+5. PLAN DE ACCIÓN 7 DÍAS
+Día 1:
+Día 2:
+Día 3:
+Día 4:
+Día 5:
+Día 6:
+Día 7:
 
 6. CONTENIDO LISTO
-3 ideas de contenido que pueda publicar mañana.
+3 ideas de contenido listas para publicar.
 
 7. MENSAJES DE VENTA
 2 mensajes listos para usar.
 
 8. QUÉ ELIMINAR YA
-Qué dejar de hacer inmediatamente.
+Qué debe dejar de hacer inmediatamente.
 
-9. CONCLUSIÓN FUERTE
-Cerrar con impacto.
+9. PLAN A 30 DÍAS
+Qué hacer durante el mes.
 
-Habla directo.
-Sin relleno.
-Sin frases genéricas.
+10. MÉTRICA DE LA VERDAD
+Qué señal concreta debe mirar.
+
+11. CONCLUSIÓN FUERTE
+Cierre directo.
+
+Respondé ahora con el plan completo.
 `;
 
-  try {
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${OPENAI_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        messages: [{ role: "user", content: prompt }],
-      }),
-    });
+    const plan = await llamarGemini(promptPlan);
 
-    const data = await response.json();
+    res.json({ ok: true, plan });
 
-    res.json({
-      plan: data.choices?.[0]?.message?.content || "Error generando plan",
-    });
   } catch (error) {
-    res.json({ error: "No se pudo generar el plan" });
+    res.status(500).json({
+      error: "Error generando plan",
+      detalle: error.message
+    });
   }
 });
 
-app.listen(3000, () => {
-  console.log("Server running on port 3000");
+const PORT = process.env.PORT || 3000;
+
+app.listen(PORT, () => {
+  console.log("Servidor Problema Cero activo en puerto " + PORT);
 });
