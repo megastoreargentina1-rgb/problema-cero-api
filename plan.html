@@ -1,1 +1,86 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tu Plan - Problema Cero</title>
 
+<style>
+body{
+  margin:0;
+  font-family:Arial,sans-serif;
+  background:#020617;
+  color:#e5e7eb;
+}
+
+.container{
+  max-width:820px;
+  margin:auto;
+  padding:30px 18px;
+}
+
+h1{
+  text-align:center;
+  margin-bottom:20px;
+}
+
+.block{
+  background:#111827;
+  padding:20px;
+  border-radius:14px;
+  margin-top:20px;
+  white-space:pre-line;
+  line-height:1.6;
+}
+
+.loading{
+  text-align:center;
+  color:#9ca3af;
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+<h1>Tu plan personalizado</h1>
+
+<div id="plan" class="block loading">
+Generando tu plan...
+</div>
+
+</div>
+
+<script>
+
+const userId = localStorage.getItem("pc_user_id");
+const problem = localStorage.getItem("pc_problem");
+const respuestas = JSON.parse(localStorage.getItem("pc_respuestas") || "{}");
+
+async function cargarPlan(){
+
+  const res = await fetch("https://problema-cero-api.onrender.com/api/plan",{
+    method:"POST",
+    headers:{
+      "Content-Type":"application/json"
+    },
+    body:JSON.stringify({
+      userId,
+      problem,
+      respuestas
+    })
+  });
+
+  const data = await res.json();
+
+  document.getElementById("plan").innerText = data.plan || data.error || "Error generando plan.";
+
+}
+
+cargarPlan();
+
+</script>
+
+</body>
+</html>
