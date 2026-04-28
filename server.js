@@ -48,8 +48,8 @@ Reglas:
 - No seas genérico
 - No inventes nichos
 - Si el usuario menciona un nicho, profundizalo
-- Hablá del negocio real
-- Sé claro y directo
+- Adaptá el lenguaje al tipo de negocio (ej: clientas, pacientes, alumnos, pedidos, turnos, etc)
+- Hablá como una persona real, no como IA
 
 Estructura:
 1. DIAGNÓSTICO
@@ -57,8 +57,6 @@ Estructura:
 3. CAUSA REAL
 4. ACCIÓN HOY
 5. IMPACTO
-
-Esto es diagnóstico inicial.
 `;
 
     const diagnosticoBase = await llamarGemini(prompt);
@@ -67,40 +65,17 @@ Esto es diagnóstico inicial.
 
 Esto que acabás de ver es solo la superficie.
 
-El problema real no es que vendas poco.
+El problema real no es lo que estás viendo ahora.
 Es que estás operando sin una estructura que convierta.
 
-Hoy estás invirtiendo tiempo, contenido y dinero…
-pero sin una dirección clara que transforme eso en ventas.
+Si seguís haciendo lo mismo:
+más contenido, más esfuerzo… mismo resultado.
 
-Y eso tiene una consecuencia simple:
-vas a seguir haciendo más esfuerzo para obtener el mismo resultado.
-
-Más publicaciones.
-Más publicidad.
-Más desgaste.
-
-Y las mismas pocas ventas.
-
-El punto no es trabajar más.
-Es dejar de trabajar a ciegas.
-
-Porque si no corregís esto ahora,
-en 3 meses vas a estar exactamente en el mismo lugar donde estás hoy.
-
-El plan completo no te da más teoría.
-
-Te muestra exactamente:
-- qué cambiar
-- qué eliminar
-- qué hacer esta semana
-- y dónde estás perdiendo ventas sin darte cuenta
+El plan completo no explica más.
+Te dice exactamente qué cambiar, qué eliminar y qué hacer esta semana.
 
 No es información.
 Es ejecución.
-
-La diferencia entre seguir intentando…
-o empezar a destrabar el negocio de verdad.
 `;
 
     res.json({
@@ -118,66 +93,52 @@ app.post("/api/plan", async (req, res) => {
     const { problem, respuestas } = req.body;
 
     const promptPlan = `
-Actuá como un equipo de consultores senior (negocio, marketing, ventas y ejecución).
+Actuá como un equipo de consultores senior.
 
-CASO REAL:
+CASO:
 ${problem}
 
 RESPUESTAS:
 ${JSON.stringify(respuestas || {}, null, 2)}
 
-REGLA MADRE:
-Trabajá SOLO con lo que el usuario dijo.
-- No inventes nichos
-- No cambies el rubro
-- Si hay un nicho específico, profundizalo
-- Si no lo hay, no inventes uno
+REGLA CLAVE DE LENGUAJE:
+Debés adaptar TODAS las palabras al tipo de negocio.
 
-FORMA DE PENSAR:
-Analizá:
-- qué está haciendo
-- por qué no vende
-- dónde se rompe la conversión
-
-Luego decidí:
-- problema principal
-- prioridad
-
-CRITERIO:
-Esto debe sentirse como una consultoría paga real.
+Ejemplos:
+- servicios → clientas, turnos, agenda, fidelización
+- productos → ventas, pedidos, clientes
+- educación → alumnos, inscripciones
+- salud → pacientes
+- fitness → alumnos, clases
 
 PROHIBIDO:
-- contenido genérico
-- teoría sin acción
-- suavizar errores
+- usar palabras genéricas si hay un contexto claro
+- sonar como IA
+- respuestas estándar
 
 OBLIGATORIO:
+- hablar como si conocieras el negocio
+- usar lenguaje natural del rubro
 - bajar a ejemplos reales
-- explicar por qué no funciona
-- dar acciones ejecutables
 
 ESTRUCTURA:
 
 1. DIAGNÓSTICO DIRECTO
-2. RADIOGRAFÍA DEL NEGOCIO
+2. RADIOGRAFÍA
 3. ERROR PRINCIPAL
-4. ERRORES SECUNDARIOS
+4. ERRORES
 5. EJEMPLOS REALES
-6. PRIORIDAD ABSOLUTA
+6. PRIORIDAD
 7. PLAN 7 DÍAS
-8. CONTENIDO LISTO
-9. MENSAJES DE VENTA
-10. QUÉ ELIMINAR YA
+8. CONTENIDO
+9. MENSAJES
+10. ELIMINAR
 11. PLAN 30 DÍAS
-12. MÉTRICA REAL
-13. CONCLUSIÓN FUERTE
+12. MÉTRICA
+13. CONCLUSIÓN
 
 TONO:
-Directo, profesional, claro.
-Sin relleno.
-
-Esto no es contenido.
-Es decisión.
+humano, directo, específico.
 `;
 
     const plan = await llamarGemini(promptPlan);
