@@ -61,9 +61,52 @@ Estructura:
 Esto es diagnóstico inicial.
 `;
 
-    const diagnostico = await llamarGemini(prompt);
+    const diagnosticoBase = await llamarGemini(prompt);
 
-    res.json({ ok: true, diagnostico });
+    const cierre = `
+
+Esto que acabás de ver es solo la superficie.
+
+El problema real no es que vendas poco.
+Es que estás operando sin una estructura que convierta.
+
+Hoy estás invirtiendo tiempo, contenido y dinero…
+pero sin una dirección clara que transforme eso en ventas.
+
+Y eso tiene una consecuencia simple:
+vas a seguir haciendo más esfuerzo para obtener el mismo resultado.
+
+Más publicaciones.
+Más publicidad.
+Más desgaste.
+
+Y las mismas pocas ventas.
+
+El punto no es trabajar más.
+Es dejar de trabajar a ciegas.
+
+Porque si no corregís esto ahora,
+en 3 meses vas a estar exactamente en el mismo lugar donde estás hoy.
+
+El plan completo no te da más teoría.
+
+Te muestra exactamente:
+- qué cambiar
+- qué eliminar
+- qué hacer esta semana
+- y dónde estás perdiendo ventas sin darte cuenta
+
+No es información.
+Es ejecución.
+
+La diferencia entre seguir intentando…
+o empezar a destrabar el negocio de verdad.
+`;
+
+    res.json({
+      ok: true,
+      diagnostico: diagnosticoBase + cierre
+    });
 
   } catch (error) {
     res.status(500).json({ error: "Error diagnóstico", detalle: error.message });
@@ -90,79 +133,51 @@ Trabajá SOLO con lo que el usuario dijo.
 - Si hay un nicho específico, profundizalo
 - Si no lo hay, no inventes uno
 
-FORMA DE PENSAR (OBLIGATORIO):
-Antes de responder, analizá:
+FORMA DE PENSAR:
+Analizá:
 - qué está haciendo
 - por qué no vende
 - dónde se rompe la conversión
-- qué cree que funciona pero no funciona
 
 Luego decidí:
-- cuál es el problema principal
-- qué se ataca primero
+- problema principal
+- prioridad
 
 CRITERIO:
 Esto debe sentirse como una consultoría paga real.
 
 PROHIBIDO:
 - contenido genérico
-- frases de marketing básicas
 - teoría sin acción
 - suavizar errores
-- hablar como IA
 
 OBLIGATORIO:
-- bajar a ejemplos concretos
-- criticar con claridad
+- bajar a ejemplos reales
 - explicar por qué no funciona
 - dar acciones ejecutables
 
 ESTRUCTURA:
 
 1. DIAGNÓSTICO DIRECTO
-Una frase que rompa su idea actual.
-
 2. RADIOGRAFÍA DEL NEGOCIO
-Qué está pasando realmente y por qué no convierte.
-
-3. ERROR PRINCIPAL (UNO SOLO)
-Elegí el problema más importante y explicalo.
-
+3. ERROR PRINCIPAL
 4. ERRORES SECUNDARIOS
-Lista clara de lo que también está mal.
-
 5. EJEMPLOS REALES
-Bajalo a situaciones concretas (contenido, ventas, producto).
-
 6. PRIORIDAD ABSOLUTA
-Qué tiene que cambiar primero y por qué.
-
 7. PLAN 7 DÍAS
-Día por día con acciones reales.
-
 8. CONTENIDO LISTO
-3 piezas específicas aplicadas a su negocio.
-
 9. MENSAJES DE VENTA
-2 textos listos para usar.
-
 10. QUÉ ELIMINAR YA
-
 11. PLAN 30 DÍAS
-
 12. MÉTRICA REAL
-
 13. CONCLUSIÓN FUERTE
 
 TONO:
-Directo.
-Profesional.
-Claro.
-Incómodo cuando haga falta.
+Directo, profesional, claro.
 Sin relleno.
 
 Esto no es contenido.
-Es una decisión.
+Es decisión.
 `;
 
     const plan = await llamarGemini(promptPlan);
