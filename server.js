@@ -41,30 +41,47 @@ async function llamarGemini(prompt) {
   return data?.candidates?.[0]?.content?.parts?.[0]?.text || "No se pudo generar respuesta.";
 }
 
-app.get("/api/test-sheets", async (req, res) => {
-  try {
-    await guardarEnSheets({
-      userId: "test_render",
-      tipo: "test",
-      problema: "Prueba técnica desde Render",
-      diagnostico: "Si aparece esta fila, Google Sheets está conectado correctamente.",
-      respuestas: "",
-      feedback: "",
-      analisisCompleto: ""
-    });
-
-    res.json({
-      ok: true,
-      mensaje: "Guardado REAL confirmado en Google Sheets"
-    });
-  } catch (error) {
-    res.status(500).json({
-      ok: false,
-      mensaje: "NO se pudo guardar en Google Sheets",
-      error: error.message
-    });
+async function guardarEnSheets(datos) {
+  if (!GOOGLE_SHEET_ID) {
+    throw new Error("Falta GOOGLE_SHEET_ID en Render.");
   }
-});
+
+  if (!GOOGLE_SERVICE_ACCOUNT_EMAIL) {
+    throw new Error("Falta GOOGLE_SERVICE_ACCOUNT_EMAIL en Render.");
+  }
+
+  if (!GOOGLE_PRIVATE_KEY) {
+    throw new Error("Falta GOOGLE_PRIVATE_KEY en Render.");
+  }
+
+  const auth = new google.auth.JWT({
+    email: GOOGLE_SERVICE_ACCOUNT_EMAIL,
+    key: GOOGLE_PRIVATE_KEY,
+    scopes: ["https://www.googleapis.com/auth/spreadsheets"]
+  });
+
+  const sheets = google.sheets({ version: "v4", auth });
+
+  await sheets.spreadsheets.values.append({
+    spreadsheetId: GOOGLE_SHEET_ID,
+    range: "Hoja 1!A:H",
+    valueInputOption: "USER_ENTERED",
+    requestBody: {
+      values: [[
+        new Date().toLocaleString("es-AR"),
+        datos.userId || "",
+        datos.tipo || "",
+        datos.problema || "",
+        datos.diagnostico || "",
+        datos.respuestas || "",
+        datos.feedback || "",
+        datos.analisisCompleto || ""
+      ]]
+    }
+  });
+
+  return true;
+}
 
 function crearPromptDiagnostico(problem) {
   return `
@@ -331,6 +348,15 @@ Indicá de 3 a 5 cosas concretas que debe dejar de hacer.
 No digas generalidades.
 No digas “mejorar marketing”.
 
+Ejemplos de tipo de respuesta:
+- dejar de publicar sin intención estratégica
+- dejar de hablarle a todo el mundo
+- dejar de mostrar producto sin contexto
+- dejar de invertir en publicidad antes de ordenar la oferta
+- dejar de medir solo likes si el problema es conversión
+
+Adaptalo al caso real.
+
 ━━━━━━━━━━━━━━━━━━━━
 
 🔧 QUÉ CORREGIR PRIMERO
@@ -355,6 +381,8 @@ Día 6:
 Día 7:
 
 Cada día debe tener una acción concreta y realista.
+
+No poner “pensar”, “mejorar” o “analizar” sin decir exactamente qué hacer.
 
 ━━━━━━━━━━━━━━━━━━━━
 
@@ -383,6 +411,8 @@ Cada idea debe incluir:
 - tema
 - objetivo del contenido
 
+No dar ideas genéricas.
+
 ━━━━━━━━━━━━━━━━━━━━
 
 💬 MENSAJES DE VENTA LISTOS PARA USAR
@@ -390,6 +420,10 @@ Cada idea debe incluir:
 Dá 3 mensajes concretos que el usuario pueda adaptar y usar.
 
 Deben sonar humanos, claros y aplicados al negocio.
+
+No sonar agresivos.
+No sonar desesperados.
+No sonar genéricos.
 
 ━━━━━━━━━━━━━━━━━━━━
 
@@ -402,6 +436,8 @@ Explicá:
 - por qué importa
 - qué decisión tomar según el resultado
 
+Usá lenguaje simple.
+
 ━━━━━━━━━━━━━━━━━━━━
 
 ⚠️ SI / ENTONCES
@@ -411,6 +447,8 @@ Dá 3 reglas de decisión.
 Formato:
 Si pasa X, entonces hacer Y.
 Si no pasa X, entonces corregir Z.
+
+Esto debe ayudar a que la persona no vuelva a caer en confusión.
 
 ━━━━━━━━━━━━━━━━━━━━
 
@@ -467,15 +505,19 @@ Es dirección clara.
 
     const resultadoFinal = respuesta + cierre;
 
-    await guardarEnSheets({
-      userId,
-      tipo: esAnalisisCompleto ? "analisis_completo" : "diagnostico_inicial",
-      problema: problem,
-      diagnostico: esAnalisisCompleto ? "" : resultadoFinal,
-      respuestas: "",
-      feedback: "",
-      analisisCompleto: esAnalisisCompleto ? resultadoFinal : ""
-    });
+    try {
+      await guardarEnSheets({
+        userId,
+        tipo: esAnalisisCompleto ? "analisis_completo" : "diagnostico_inicial",
+        problema: problem,
+        diagnostico: esAnalisisCompleto ? "" : resultadoFinal,
+        respuestas: "",
+        feedback: "",
+        analisisCompleto: esAnalisisCompleto ? resultadoFinal : ""
+      });
+    } catch (sheetError) {
+      console.error("Error guardando en Sheets:", sheetError.message);
+    }
 
     res.json({
       ok: true,
@@ -491,19 +533,45 @@ Es dirección clara.
 });
 
 app.get("/api/test-sheets", async (req, res) => {
-  await guardarEnSheets({
-    userId: "test_render",
-    tipo: "test",
-    problema: "Prueba técnica desde Render",
-    diagnostico: "Si aparece esta fila, Google Sheets está conectado correctamente.",
-    respuestas: "",
-    feedback: "",
-    analisisCompleto: ""
-  });
+  try {
+    await guardarEnSheets({
+      userId: "test_render",
+      tipo: "test",
+      problema: "Prueba técnica desde Render",
+      diagnostico: "Si aparece esta fila, Google Sheets está conectado correctamente.",
+      respuestas: "",
+      feedback: "",
+      analisisCompleto: ""
+    });
 
+    res.json({
+      ok: true,
+      mensaje: "Guardado REAL confirmado en Google Sheets"
+    });
+
+  } catch (error) {
+    console.error("TEST SHEETS ERROR:", error);
+
+    res.status(500).json({
+      ok: false,
+      mensaje: "NO se pudo guardar en Google Sheets",
+      error: error.message,
+      detalle: String(error)
+    });
+  }
+});
+
+app.get("/api/debug-env", (req, res) => {
   res.json({
-    ok: true,
-    mensaje: "Prueba enviada a Google Sheets"
+    sheetId: GOOGLE_SHEET_ID ? "OK" : "FALTA",
+    serviceEmail: GOOGLE_SERVICE_ACCOUNT_EMAIL ? "OK" : "FALTA",
+    privateKey: GOOGLE_PRIVATE_KEY ? "OK" : "FALTA",
+    privateKeyStartsCorrectly: GOOGLE_PRIVATE_KEY
+      ? GOOGLE_PRIVATE_KEY.startsWith("-----BEGIN PRIVATE KEY-----")
+      : false,
+    privateKeyEndsCorrectly: GOOGLE_PRIVATE_KEY
+      ? GOOGLE_PRIVATE_KEY.trim().endsWith("-----END PRIVATE KEY-----")
+      : false
   });
 });
 
