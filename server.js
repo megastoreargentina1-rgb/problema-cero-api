@@ -41,44 +41,30 @@ async function llamarGemini(prompt) {
   return data?.candidates?.[0]?.content?.parts?.[0]?.text || "No se pudo generar respuesta.";
 }
 
-async function guardarEnSheets(datos) {
+app.get("/api/test-sheets", async (req, res) => {
   try {
-    if (!GOOGLE_SHEET_ID || !GOOGLE_SERVICE_ACCOUNT_EMAIL || !GOOGLE_PRIVATE_KEY) {
-      console.log("Google Sheets no configurado todavía.");
-      return;
-    }
-
-    const auth = new google.auth.JWT({
-      email: GOOGLE_SERVICE_ACCOUNT_EMAIL,
-      key: GOOGLE_PRIVATE_KEY,
-      scopes: ["https://www.googleapis.com/auth/spreadsheets"]
+    await guardarEnSheets({
+      userId: "test_render",
+      tipo: "test",
+      problema: "Prueba técnica desde Render",
+      diagnostico: "Si aparece esta fila, Google Sheets está conectado correctamente.",
+      respuestas: "",
+      feedback: "",
+      analisisCompleto: ""
     });
 
-    const sheets = google.sheets({ version: "v4", auth });
-
-    await sheets.spreadsheets.values.append({
-      spreadsheetId: GOOGLE_SHEET_ID,
-      range: "Hoja 1!A:H",
-      valueInputOption: "USER_ENTERED",
-      requestBody: {
-        values: [[
-          new Date().toLocaleString("es-AR"),
-          datos.userId || "",
-          datos.tipo || "",
-          datos.problema || "",
-          datos.diagnostico || "",
-          datos.respuestas || "",
-          datos.feedback || "",
-          datos.analisisCompleto || ""
-        ]]
-      }
+    res.json({
+      ok: true,
+      mensaje: "Guardado REAL confirmado en Google Sheets"
     });
-
-    console.log("Caso guardado en Google Sheets.");
   } catch (error) {
-    console.error("Error guardando en Sheets:", error.message);
+    res.status(500).json({
+      ok: false,
+      mensaje: "NO se pudo guardar en Google Sheets",
+      error: error.message
+    });
   }
-}
+});
 
 function crearPromptDiagnostico(problem) {
   return `
