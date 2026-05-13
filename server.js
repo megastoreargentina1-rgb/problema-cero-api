@@ -1,16 +1,23 @@
 const express = require("express");
 const cors = require("cors");
+const { google } = require("googleapis");
 require("dotenv").config();
 
 const app = express();
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: "10mb" }));
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
+const GOOGLE_SHEET_ID = process.env.GOOGLE_SHEET_ID;
+const GOOGLE_SERVICE_ACCOUNT_EMAIL = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
+const GOOGLE_PRIVATE_KEY = process.env.GOOGLE_PRIVATE_KEY
+  ? process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, "\n")
+  : null;
+
 app.get("/", (req, res) => {
-  res.send("Problema Cero API activa");
+  res.send("Problema Cero API profesional activa");
 });
 
 async function llamarGemini(prompt) {
@@ -32,6 +39,45 @@ async function llamarGemini(prompt) {
   }
 
   return data?.candidates?.[0]?.content?.parts?.[0]?.text || "No se pudo generar respuesta.";
+}
+
+async function guardarEnSheets(datos) {
+  try {
+    if (!GOOGLE_SHEET_ID || !GOOGLE_SERVICE_ACCOUNT_EMAIL || !GOOGLE_PRIVATE_KEY) {
+      console.log("Google Sheets no configurado todavía.");
+      return;
+    }
+
+    const auth = new google.auth.JWT({
+      email: GOOGLE_SERVICE_ACCOUNT_EMAIL,
+      key: GOOGLE_PRIVATE_KEY,
+      scopes: ["https://www.googleapis.com/auth/spreadsheets"]
+    });
+
+    const sheets = google.sheets({ version: "v4", auth });
+
+    await sheets.spreadsheets.values.append({
+      spreadsheetId: GOOGLE_SHEET_ID,
+      range: "Hoja 1!A:H",
+      valueInputOption: "USER_ENTERED",
+      requestBody: {
+        values: [[
+          new Date().toLocaleString("es-AR"),
+          datos.userId || "",
+          datos.tipo || "",
+          datos.problema || "",
+          datos.diagnostico || "",
+          datos.respuestas || "",
+          datos.feedback || "",
+          datos.analisisCompleto || ""
+        ]]
+      }
+    });
+
+    console.log("Caso guardado en Google Sheets.");
+  } catch (error) {
+    console.error("Error guardando en Sheets:", error.message);
+  }
 }
 
 function crearPromptDiagnostico(problem) {
@@ -299,15 +345,6 @@ Indicá de 3 a 5 cosas concretas que debe dejar de hacer.
 No digas generalidades.
 No digas “mejorar marketing”.
 
-Ejemplos de tipo de respuesta:
-- dejar de publicar sin intención estratégica
-- dejar de hablarle a todo el mundo
-- dejar de mostrar producto sin contexto
-- dejar de invertir en publicidad antes de ordenar la oferta
-- dejar de medir solo likes si el problema es conversión
-
-Adaptalo al caso real.
-
 ━━━━━━━━━━━━━━━━━━━━
 
 🔧 QUÉ CORREGIR PRIMERO
@@ -332,8 +369,6 @@ Día 6:
 Día 7:
 
 Cada día debe tener una acción concreta y realista.
-
-No poner “pensar”, “mejorar” o “analizar” sin decir exactamente qué hacer.
 
 ━━━━━━━━━━━━━━━━━━━━
 
@@ -362,8 +397,6 @@ Cada idea debe incluir:
 - tema
 - objetivo del contenido
 
-No dar ideas genéricas.
-
 ━━━━━━━━━━━━━━━━━━━━
 
 💬 MENSAJES DE VENTA LISTOS PARA USAR
@@ -371,10 +404,6 @@ No dar ideas genéricas.
 Dá 3 mensajes concretos que el usuario pueda adaptar y usar.
 
 Deben sonar humanos, claros y aplicados al negocio.
-
-No sonar agresivos.
-No sonar desesperados.
-No sonar genéricos.
 
 ━━━━━━━━━━━━━━━━━━━━
 
@@ -387,8 +416,6 @@ Explicá:
 - por qué importa
 - qué decisión tomar según el resultado
 
-Usá lenguaje simple.
-
 ━━━━━━━━━━━━━━━━━━━━
 
 ⚠️ SI / ENTONCES
@@ -398,8 +425,6 @@ Dá 3 reglas de decisión.
 Formato:
 Si pasa X, entonces hacer Y.
 Si no pasa X, entonces corregir Z.
-
-Esto debe ayudar a que la persona no vuelva a caer en confusión.
 
 ━━━━━━━━━━━━━━━━━━━━
 
@@ -419,7 +444,7 @@ Cerrar con dirección.
 
 app.post("/api/diagnostico", async (req, res) => {
   try {
-    const { problem } = req.body;
+    const { problem, userId } = req.body;
 
     const esAnalisisCompleto =
       typeof problem === "string" &&
@@ -454,18 +479,50 @@ Es dirección clara.
 `;
     }
 
+    const resultadoFinal = respuesta + cierre;
+
+    await guardarEnSheets({
+      userId,
+      tipo: esAnalisisCompleto ? "analisis_completo" : "diagnostico_inicial",
+      problema: problem,
+      diagnostico: esAnalisisCompleto ? "" : resultadoFinal,
+      respuestas: "",
+      feedback: "",
+      analisisCompleto: esAnalisisCompleto ? resultadoFinal : ""
+    });
+
     res.json({
       ok: true,
-      diagnostico: respuesta + cierre
+      diagnostico: resultadoFinal
     });
 
   } catch (error) {
-    res.status(500).json({ error: "Error diagnóstico", detalle: error.message });
+    res.status(500).json({
+      error: "Error diagnóstico",
+      detalle: error.message
+    });
   }
+});
+
+app.get("/api/test-sheets", async (req, res) => {
+  await guardarEnSheets({
+    userId: "test_render",
+    tipo: "test",
+    problema: "Prueba técnica desde Render",
+    diagnostico: "Si aparece esta fila, Google Sheets está conectado correctamente.",
+    respuestas: "",
+    feedback: "",
+    analisisCompleto: ""
+  });
+
+  res.json({
+    ok: true,
+    mensaje: "Prueba enviada a Google Sheets"
+  });
 });
 
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
-  console.log("Servidor Problema Cero activo");
+  console.log("Servidor Problema Cero profesional activo");
 });
