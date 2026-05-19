@@ -1,6 +1,7 @@
 const express = require("express");
 const cors = require("cors");
 const { google } = require("googleapis");
+const PDFDocument = require("pdfkit");
 require("dotenv").config();
 
 const app = express();
@@ -440,6 +441,241 @@ NO cerrar con motivación.
 Cerrar con dirección.
 `;
 }
+
+function limpiarTextoPDF(texto) {
+  if (!texto) return "";
+
+  return String(texto)
+    .replace(/[⚡🔴🧠⚠️🚀💰🔥🔎🧭🎯🛑🔧📅📆📌💬📊👉]/g, "")
+    .replace(/━━━━━━━━━━━━━━━━━━━━/g, "\n")
+    .replace(/[“”]/g, '"')
+    .replace(/[‘’]/g, "'")
+    .replace(/\r/g, "")
+    .trim();
+}
+
+function agregarFooter(doc) {
+  const bottom = doc.page.height - 45;
+
+  doc
+    .fontSize(8)
+    .fillColor("#777777")
+    .text("Problema Cero · Diagnóstico estratégico empresarial · problemacero.com.ar", 50, bottom, {
+      align: "center",
+      width: doc.page.width - 100
+    });
+}
+
+function verificarEspacio(doc, alturaNecesaria = 80) {
+  if (doc.y + alturaNecesaria > doc.page.height - 70) {
+    doc.addPage();
+    agregarFooter(doc);
+    doc.y = 55;
+  }
+}
+
+function tituloSeccion(doc, titulo) {
+  verificarEspacio(doc, 60);
+
+  doc.moveDown(0.8);
+
+  doc
+    .strokeColor("#D32F2F")
+    .lineWidth(1.2)
+    .moveTo(50, doc.y)
+    .lineTo(545, doc.y)
+    .stroke();
+
+  doc.moveDown(0.8);
+
+  doc
+    .font("Helvetica-Bold")
+    .fontSize(13)
+    .fillColor("#111111")
+    .text(titulo.toUpperCase(), {
+      width: 495
+    });
+
+  doc.moveDown(0.5);
+}
+
+function parrafo(doc, texto) {
+  const limpio = limpiarTextoPDF(texto);
+  if (!limpio) return;
+
+  const partes = limpio.split("\n").filter(linea => linea.trim() !== "");
+
+  partes.forEach(linea => {
+    verificarEspacio(doc, 55);
+
+    doc
+      .font("Helvetica")
+      .fontSize(10.5)
+      .fillColor("#222222")
+      .text(linea.trim(), {
+        width: 495,
+        align: "left",
+        lineGap: 4
+      });
+
+    doc.moveDown(0.45);
+  });
+}
+
+function generarPDFBuffer(datos) {
+  return new Promise((resolve, reject) => {
+    const doc = new PDFDocument({
+      size: "A4",
+      margin: 50,
+      bufferPages: true
+    });
+
+    const chunks = [];
+
+    doc.on("data", chunk => chunks.push(chunk));
+    doc.on("end", () => resolve(Buffer.concat(chunks)));
+    doc.on("error", reject);
+
+    const fecha = new Date().toLocaleString("es-AR");
+    const tipo = datos.tipo || "diagnostico";
+    const consultaOriginal = limpiarTextoPDF(datos.consultaOriginal || "");
+    const diagnosticoInicial = limpiarTextoPDF(datos.diagnosticoInicial || "");
+    const analisisCompleto = limpiarTextoPDF(datos.analisisCompleto || "");
+
+    doc.rect(0, 0, doc.page.width, 95).fill("#111827");
+
+    doc
+      .fillColor("#ffffff")
+      .font("Helvetica-Bold")
+      .fontSize(24)
+      .text("PROBLEMA CERO", 50, 30);
+
+    doc
+      .fillColor("#f3f4f6")
+      .font("Helvetica")
+      .fontSize(11)
+      .text("Diagnóstico estratégico empresarial", 50, 62);
+
+    doc
+      .fillColor("#D32F2F")
+      .font("Helvetica-Bold")
+      .fontSize(10)
+      .text("INFORME EJECUTIVO", 410, 34, {
+        width: 135,
+        align: "right"
+      });
+
+    doc
+      .fillColor("#e5e7eb")
+      .font("Helvetica")
+      .fontSize(8)
+      .text(fecha, 410, 58, {
+        width: 135,
+        align: "right"
+      });
+
+    doc.y = 125;
+
+    doc
+      .font("Helvetica-Bold")
+      .fontSize(16)
+      .fillColor("#111111")
+      .text(
+        tipo === "analisis_completo"
+          ? "Análisis estratégico completo"
+          : "Diagnóstico inicial",
+        {
+          width: 495
+        }
+      );
+
+    doc.moveDown(0.7);
+
+    doc
+      .font("Helvetica")
+      .fontSize(10)
+      .fillColor("#555555")
+      .text(
+        "Informe generado automáticamente por Problema Cero a partir de la información cargada por el usuario. El objetivo es aportar claridad, prioridad y dirección estratégica.",
+        {
+          width: 495,
+          lineGap: 3
+        }
+      );
+
+    tituloSeccion(doc, "Consulta original");
+    parrafo(doc, consultaOriginal);
+
+    if (diagnosticoInicial) {
+      tituloSeccion(doc, "Diagnóstico inicial");
+      parrafo(doc, diagnosticoInicial);
+    }
+
+    if (analisisCompleto) {
+      tituloSeccion(doc, "Análisis completo");
+      parrafo(doc, analisisCompleto);
+    }
+
+    tituloSeccion(doc, "Nota final");
+    parrafo(doc, "Este informe no promete resultados mágicos. Su función es ayudar a detectar el bloqueo principal, ordenar prioridades y facilitar mejores decisiones de negocio.");
+
+    agregarFooter(doc);
+
+    const range = doc.bufferedPageRange();
+
+    for (let i = range.start; i < range.start + range.count; i++) {
+      doc.switchToPage(i);
+
+      doc
+        .fontSize(8)
+        .fillColor("#777777")
+        .text(`Página ${i + 1} de ${range.count}`, 50, doc.page.height - 30, {
+          align: "right",
+          width: doc.page.width - 100
+        });
+    }
+
+    doc.end();
+  });
+}
+
+app.post("/api/generar-pdf", async (req, res) => {
+  try {
+    const {
+      tipo,
+      consultaOriginal,
+      diagnosticoInicial,
+      analisisCompleto
+    } = req.body;
+
+    const pdfBuffer = await generarPDFBuffer({
+      tipo,
+      consultaOriginal,
+      diagnosticoInicial,
+      analisisCompleto
+    });
+
+    const nombreArchivo =
+      tipo === "analisis_completo"
+        ? "Informe_Completo_ProblemaCero.pdf"
+        : "Diagnostico_ProblemaCero.pdf";
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `inline; filename="${nombreArchivo}"`);
+    res.setHeader("Content-Length", pdfBuffer.length);
+
+    res.send(pdfBuffer);
+
+  } catch (error) {
+    console.error("Error generando PDF:", error);
+
+    res.status(500).json({
+      ok: false,
+      mensaje: "No se pudo generar el PDF",
+      error: error.message
+    });
+  }
+});
 
 app.post("/api/diagnostico", async (req, res) => {
   try {
