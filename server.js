@@ -442,6 +442,22 @@ Cerrar con dirección.
 `;
 }
 
+/* =========================
+   MOTOR PDF PREMIUM V2
+   ========================= */
+
+const PDF_COLORS = {
+  dark: "#0B1120",
+  dark2: "#111827",
+  red: "#D32F2F",
+  redSoft: "#FDECEC",
+  text: "#111827",
+  muted: "#6B7280",
+  soft: "#F8FAFC",
+  border: "#E5E7EB",
+  white: "#FFFFFF"
+};
+
 function limpiarTextoPDF(texto) {
   if (!texto) return "";
 
@@ -451,74 +467,515 @@ function limpiarTextoPDF(texto) {
     .replace(/[“”]/g, '"')
     .replace(/[‘’]/g, "'")
     .replace(/\r/g, "")
+    .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
 
-function agregarFooter(doc) {
-  const bottom = doc.page.height - 45;
-
-  doc
-    .fontSize(8)
-    .fillColor("#777777")
-    .text("Problema Cero · Diagnóstico estratégico empresarial · problemacero.com.ar", 50, bottom, {
-      align: "center",
-      width: doc.page.width - 100
-    });
+function normalizarTitulo(linea) {
+  return limpiarTextoPDF(linea)
+    .replace(/^#+\s*/g, "")
+    .replace(/^\d+\.\s*/g, "")
+    .trim();
 }
 
-function verificarEspacio(doc, alturaNecesaria = 80) {
-  if (doc.y + alturaNecesaria > doc.page.height - 70) {
-    doc.addPage();
-    agregarFooter(doc);
-    doc.y = 55;
-  }
+function esTituloImportante(linea) {
+  const limpia = normalizarTitulo(linea);
+  if (!limpia) return false;
+
+  const titulos = [
+    "RESUMEN RÁPIDO",
+    "RESUMEN RAPIDO",
+    "PROBLEMA PRINCIPAL",
+    "QUÉ SIGNIFICA",
+    "QUE SIGNIFICA",
+    "CAUSA REAL",
+    "ACCIÓN CONCRETA",
+    "ACCION CONCRETA",
+    "IMPACTO",
+    "CIERRE",
+    "ESTE DIAGNÓSTICO ES SOLO EL PRIMER NIVEL",
+    "ESTE DIAGNOSTICO ES SOLO EL PRIMER NIVEL",
+    "MAPA EJECUTIVO",
+    "PRIORIDAD ABSOLUTA",
+    "QUÉ DEJAR DE HACER YA",
+    "QUE DEJAR DE HACER YA",
+    "QUÉ CORREGIR PRIMERO",
+    "QUE CORREGIR PRIMERO",
+    "PLAN DE ACCIÓN — PRÓXIMOS 7 DÍAS",
+    "PLAN DE ACCION — PROXIMOS 7 DIAS",
+    "PLAN DE ACCIÓN - PRÓXIMOS 7 DÍAS",
+    "PLAN DE ACCION - PROXIMOS 7 DIAS",
+    "PLAN DE ACCIÓN — PRÓXIMOS 30 DÍAS",
+    "PLAN DE ACCION — PROXIMOS 30 DIAS",
+    "PLAN DE ACCIÓN - PRÓXIMOS 30 DÍAS",
+    "PLAN DE ACCION - PROXIMOS 30 DIAS",
+    "CONTENIDO QUE DEBERÍA CREAR",
+    "CONTENIDO QUE DEBERIA CREAR",
+    "MENSAJES DE VENTA LISTOS PARA USAR",
+    "MÉTRICA QUE DEBERÍA MIRAR",
+    "METRICA QUE DEBERIA MIRAR",
+    "SI / ENTONCES",
+    "CIERRE ESTRATÉGICO",
+    "CIERRE ESTRATEGICO",
+    "NOTA FINAL"
+  ];
+
+  return titulos.some(t => limpia.toUpperCase().includes(t));
 }
 
-function tituloSeccion(doc, titulo) {
-  verificarEspacio(doc, 60);
+function crearCodigoCaso() {
+  return "PC-" + Date.now().toString().slice(-6);
+}
 
-  doc.moveDown(0.8);
-
+function dibujarLogoMinimal(doc, x, y, size = 28) {
   doc
-    .strokeColor("#D32F2F")
-    .lineWidth(1.2)
-    .moveTo(50, doc.y)
-    .lineTo(545, doc.y)
-    .stroke();
-
-  doc.moveDown(0.8);
+    .roundedRect(x, y, size, size, 7)
+    .fill(PDF_COLORS.white);
 
   doc
     .font("Helvetica-Bold")
-    .fontSize(13)
-    .fillColor("#111111")
-    .text(titulo.toUpperCase(), {
-      width: 495
-    });
+    .fontSize(17)
+    .fillColor(PDF_COLORS.dark)
+    .text("P", x + 8, y + 5);
 
-  doc.moveDown(0.5);
+  doc
+    .strokeColor(PDF_COLORS.red)
+    .lineWidth(2)
+    .moveTo(x + size - 12, y + size - 9)
+    .lineTo(x + size - 5, y + size - 16)
+    .lineTo(x + size - 2, y + size - 13)
+    .stroke();
 }
 
-function parrafo(doc, texto) {
+function footer(doc, pageNumber = null, totalPages = null) {
+  const y = doc.page.height - 42;
+
+  doc
+    .strokeColor("#E5E7EB")
+    .lineWidth(0.7)
+    .moveTo(48, y - 12)
+    .lineTo(doc.page.width - 48, y - 12)
+    .stroke();
+
+  doc
+    .font("Helvetica")
+    .fontSize(8.5)
+    .fillColor(PDF_COLORS.muted)
+    .text("Problema Cero · Interconsulta estratégica empresarial", 48, y, {
+      width: 300,
+      align: "left"
+    });
+
+  doc
+    .font("Helvetica")
+    .fontSize(8.5)
+    .fillColor(PDF_COLORS.muted)
+    .text(
+      pageNumber && totalPages ? `Página ${pageNumber} de ${totalPages}` : "problemacero.com.ar",
+      345,
+      y,
+      {
+        width: 200,
+        align: "right"
+      }
+    );
+}
+
+function nuevaPagina(doc) {
+  doc.addPage();
+  doc.y = 58;
+}
+
+function asegurarEspacio(doc, altura = 90) {
+  if (doc.y + altura > doc.page.height - 72) {
+    nuevaPagina(doc);
+  }
+}
+
+function escribirTexto(doc, texto, opciones = {}) {
+  const width = opciones.width || 500;
+  const fontSize = opciones.fontSize || 10.8;
+  const lineGap = opciones.lineGap || 4;
+  const x = opciones.x || 48;
+
   const limpio = limpiarTextoPDF(texto);
   if (!limpio) return;
 
-  const partes = limpio.split("\n").filter(linea => linea.trim() !== "");
+  const lineas = limpio.split("\n").filter(l => l.trim() !== "");
 
-  partes.forEach(linea => {
-    verificarEspacio(doc, 55);
+  lineas.forEach(linea => {
+    const t = linea.trim();
+    const height = doc.heightOfString(t, {
+      width,
+      lineGap
+    });
+
+    asegurarEspacio(doc, height + 18);
 
     doc
-      .font("Helvetica")
-      .fontSize(10.5)
-      .fillColor("#222222")
-      .text(linea.trim(), {
-        width: 495,
-        align: "left",
-        lineGap: 4
+      .font(opciones.bold ? "Helvetica-Bold" : "Helvetica")
+      .fontSize(fontSize)
+      .fillColor(opciones.color || PDF_COLORS.text)
+      .text(t, x, doc.y, {
+        width,
+        align: opciones.align || "left",
+        lineGap
       });
 
-    doc.moveDown(0.45);
+    doc.moveDown(opciones.after || 0.55);
+  });
+}
+
+function bloqueEditorial(doc, titulo, texto, opciones = {}) {
+  const x = 48;
+  const width = 500;
+  const padding = 18;
+  const tituloLimpio = normalizarTitulo(titulo);
+  const textoLimpio = limpiarTextoPDF(texto);
+
+  if (!textoLimpio) return;
+
+  const textHeight = doc.heightOfString(textoLimpio, {
+    width: width - padding * 2,
+    lineGap: 4
+  });
+
+  const boxHeight = Math.min(Math.max(textHeight + 62, 125), 360);
+
+  asegurarEspacio(boxHeight + 22);
+
+  const startY = doc.y;
+
+  doc
+    .roundedRect(x, startY, width, boxHeight, 14)
+    .fillAndStroke(opciones.fondo || PDF_COLORS.soft, opciones.border || PDF_COLORS.border);
+
+  doc
+    .roundedRect(x, startY, 6, boxHeight, 3)
+    .fill(opciones.acento || PDF_COLORS.red);
+
+  doc
+    .font("Helvetica-Bold")
+    .fontSize(12)
+    .fillColor(PDF_COLORS.dark)
+    .text(tituloLimpio.toUpperCase(), x + padding, startY + 16, {
+      width: width - padding * 2
+    });
+
+  doc
+    .font("Helvetica")
+    .fontSize(10.5)
+    .fillColor(PDF_COLORS.text)
+    .text(textoLimpio, x + padding, startY + 42, {
+      width: width - padding * 2,
+      lineGap: 4,
+      height: boxHeight - 58,
+      ellipsis: false
+    });
+
+  doc.y = startY + boxHeight + 18;
+}
+
+function portada(doc, datos) {
+  const fecha = new Date().toLocaleString("es-AR");
+  const codigo = crearCodigoCaso();
+  const tipo = datos.tipo === "analisis_completo"
+    ? "Análisis estratégico completo"
+    : "Diagnóstico inicial";
+
+  doc.rect(0, 0, doc.page.width, doc.page.height).fill(PDF_COLORS.white);
+
+  doc.rect(0, 0, doc.page.width, 260).fill(PDF_COLORS.dark);
+
+  dibujarLogoMinimal(doc, 48, 42, 34);
+
+  doc
+    .font("Helvetica-Bold")
+    .fontSize(25)
+    .fillColor(PDF_COLORS.white)
+    .text("PROBLEMA CERO", 92, 45);
+
+  doc
+    .font("Helvetica")
+    .fontSize(10)
+    .fillColor("#CBD5E1")
+    .text("Interconsulta estratégica empresarial", 92, 76);
+
+  doc
+    .font("Helvetica-Bold")
+    .fontSize(33)
+    .fillColor(PDF_COLORS.white)
+    .text(tipo, 48, 132, {
+      width: 470,
+      lineGap: 5
+    });
+
+  doc
+    .font("Helvetica")
+    .fontSize(12)
+    .fillColor("#D1D5DB")
+    .text("Un informe diseñado para detectar el bloqueo principal, ordenar prioridades y convertir ruido en dirección.", 48, 210, {
+      width: 470,
+      lineGap: 4
+    });
+
+  doc
+    .roundedRect(48, 310, 500, 120, 18)
+    .fillAndStroke(PDF_COLORS.soft, PDF_COLORS.border);
+
+  doc
+    .font("Helvetica-Bold")
+    .fontSize(10)
+    .fillColor(PDF_COLORS.red)
+    .text("CÓDIGO DE CASO", 72, 338);
+
+  doc
+    .font("Helvetica-Bold")
+    .fontSize(18)
+    .fillColor(PDF_COLORS.dark)
+    .text(codigo, 72, 356);
+
+  doc
+    .font("Helvetica-Bold")
+    .fontSize(10)
+    .fillColor(PDF_COLORS.red)
+    .text("FECHA", 330, 338);
+
+  doc
+    .font("Helvetica")
+    .fontSize(11)
+    .fillColor(PDF_COLORS.dark)
+    .text(fecha, 330, 358, {
+      width: 170
+    });
+
+  doc
+    .font("Helvetica")
+    .fontSize(10.5)
+    .fillColor(PDF_COLORS.muted)
+    .text("Este documento no busca sumar información. Busca darte una lectura más clara sobre lo que puede estar frenando el negocio.", 72, 470, {
+      width: 450,
+      lineGap: 4
+    });
+
+  doc
+    .strokeColor(PDF_COLORS.red)
+    .lineWidth(2)
+    .moveTo(48, 550)
+    .lineTo(160, 550)
+    .stroke();
+
+  doc
+    .font("Helvetica-Bold")
+    .fontSize(18)
+    .fillColor(PDF_COLORS.dark)
+    .text("Claridad. Prioridad. Dirección.", 48, 570);
+
+  footer(doc);
+}
+
+function paginaResumenCaso(doc, consultaOriginal) {
+  nuevaPagina(doc);
+
+  doc
+    .font("Helvetica-Bold")
+    .fontSize(20)
+    .fillColor(PDF_COLORS.dark)
+    .text("El caso que analizamos", 48, doc.y);
+
+  doc.moveDown(0.7);
+
+  doc
+    .font("Helvetica")
+    .fontSize(10.5)
+    .fillColor(PDF_COLORS.muted)
+    .text("Antes de diagnosticar, Problema Cero parte del síntoma declarado por la persona. Ese síntoma es la puerta de entrada: no siempre es la causa real.", 48, doc.y, {
+      width: 500,
+      lineGap: 4
+    });
+
+  doc.moveDown(1.2);
+
+  bloqueEditorial(doc, "Consulta original", consultaOriginal, {
+    fondo: "#FFFFFF",
+    border: "#E5E7EB",
+    acento: PDF_COLORS.red
+  });
+
+  asegurarEspacio(145);
+
+  const y = doc.y + 6;
+
+  doc
+    .roundedRect(48, y, 500, 116, 18)
+    .fillAndStroke("#0B1120", "#0B1120");
+
+  doc
+    .font("Helvetica-Bold")
+    .fontSize(12)
+    .fillColor("#FFFFFF")
+    .text("LECTURA CLÍNICA", 72, y + 22);
+
+  doc
+    .font("Helvetica")
+    .fontSize(10.5)
+    .fillColor("#E5E7EB")
+    .text("El diagnóstico no se queda en lo que la persona dice que le duele. Busca qué patrón, contradicción o falla estratégica puede estar generando ese dolor.", 72, y + 48, {
+      width: 445,
+      lineGap: 4
+    });
+
+  doc.y = y + 140;
+}
+
+function extraerSecciones(texto) {
+  const limpio = limpiarTextoPDF(texto);
+  const lineas = limpio.split("\n").map(l => l.trim()).filter(Boolean);
+  const secciones = [];
+  let actual = { titulo: "Lectura estratégica", contenido: [] };
+
+  lineas.forEach(linea => {
+    if (esTituloImportante(linea)) {
+      if (actual.contenido.length > 0) {
+        secciones.push(actual);
+      }
+      actual = {
+        titulo: normalizarTitulo(linea),
+        contenido: []
+      };
+    } else {
+      actual.contenido.push(linea);
+    }
+  });
+
+  if (actual.contenido.length > 0) {
+    secciones.push(actual);
+  }
+
+  return secciones;
+}
+
+function escribirSeccionesPremium(doc, tituloGeneral, texto) {
+  const secciones = extraerSecciones(texto);
+
+  if (secciones.length === 0) return;
+
+  nuevaPagina(doc);
+
+  doc
+    .font("Helvetica-Bold")
+    .fontSize(20)
+    .fillColor(PDF_COLORS.dark)
+    .text(tituloGeneral, 48, doc.y);
+
+  doc.moveDown(0.35);
+
+  doc
+    .strokeColor(PDF_COLORS.red)
+    .lineWidth(2)
+    .moveTo(48, doc.y)
+    .lineTo(150, doc.y)
+    .stroke();
+
+  doc.moveDown(1.2);
+
+  secciones.forEach((sec, index) => {
+    const contenido = sec.contenido.join("\n");
+    const esClave = index === 0 || sec.titulo.toUpperCase().includes("CAUSA") || sec.titulo.toUpperCase().includes("PRIORIDAD");
+
+    if (esClave) {
+      bloqueEditorial(doc, sec.titulo, contenido, {
+        fondo: index === 0 ? PDF_COLORS.redSoft : PDF_COLORS.soft,
+        border: "#E5E7EB",
+        acento: PDF_COLORS.red
+      });
+    } else {
+      asegurarEspacio(90);
+
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(13)
+        .fillColor(PDF_COLORS.dark)
+        .text(sec.titulo.toUpperCase(), 48, doc.y, {
+          width: 500
+        });
+
+      doc.moveDown(0.25);
+
+      doc
+        .strokeColor("#E5E7EB")
+        .lineWidth(0.8)
+        .moveTo(48, doc.y)
+        .lineTo(548, doc.y)
+        .stroke();
+
+      doc.moveDown(0.7);
+
+      escribirTexto(doc, contenido, {
+        width: 500,
+        fontSize: 10.7,
+        lineGap: 4,
+        after: 0.5
+      });
+
+      doc.moveDown(0.6);
+    }
+  });
+}
+
+function paginaCierre(doc) {
+  nuevaPagina(doc);
+
+  doc
+    .roundedRect(48, 90, 500, 270, 24)
+    .fillAndStroke(PDF_COLORS.dark, PDF_COLORS.dark);
+
+  doc
+    .font("Helvetica-Bold")
+    .fontSize(24)
+    .fillColor(PDF_COLORS.white)
+    .text("El problema no era hacer más.", 78, 135, {
+      width: 440,
+      lineGap: 6
+    });
+
+  doc
+    .font("Helvetica-Bold")
+    .fontSize(24)
+    .fillColor(PDF_COLORS.white)
+    .text("Era saber qué mirar primero.", 78, 205, {
+      width: 440,
+      lineGap: 6
+    });
+
+  doc
+    .strokeColor(PDF_COLORS.red)
+    .lineWidth(3)
+    .moveTo(78, 290)
+    .lineTo(185, 290)
+    .stroke();
+
+  doc
+    .font("Helvetica")
+    .fontSize(10.5)
+    .fillColor("#D1D5DB")
+    .text("Problema Cero no reemplaza la ejecución. Ordena la lectura del problema para que la próxima decisión no salga desde la confusión.", 78, 315, {
+      width: 430,
+      lineGap: 4
+    });
+
+  doc
+    .font("Helvetica-Bold")
+    .fontSize(14)
+    .fillColor(PDF_COLORS.dark)
+    .text("Nota final", 48, 420);
+
+  doc.moveDown(0.6);
+
+  escribirTexto(doc, "Este informe no promete resultados mágicos. Su función es ayudarte a detectar el bloqueo principal, ordenar prioridades y tomar mejores decisiones de negocio.", {
+    width: 500,
+    fontSize: 10.8,
+    lineGap: 4
   });
 }
 
@@ -526,7 +983,7 @@ function generarPDFBuffer(datos) {
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({
       size: "A4",
-      margin: 50,
+      margin: 48,
       bufferPages: true
     });
 
@@ -536,103 +993,28 @@ function generarPDFBuffer(datos) {
     doc.on("end", () => resolve(Buffer.concat(chunks)));
     doc.on("error", reject);
 
-    const fecha = new Date().toLocaleString("es-AR");
-    const tipo = datos.tipo || "diagnostico";
     const consultaOriginal = limpiarTextoPDF(datos.consultaOriginal || "");
     const diagnosticoInicial = limpiarTextoPDF(datos.diagnosticoInicial || "");
     const analisisCompleto = limpiarTextoPDF(datos.analisisCompleto || "");
 
-    doc.rect(0, 0, doc.page.width, 95).fill("#111827");
-
-    doc
-      .fillColor("#ffffff")
-      .font("Helvetica-Bold")
-      .fontSize(24)
-      .text("PROBLEMA CERO", 50, 30);
-
-    doc
-      .fillColor("#f3f4f6")
-      .font("Helvetica")
-      .fontSize(11)
-      .text("Diagnóstico estratégico empresarial", 50, 62);
-
-    doc
-      .fillColor("#D32F2F")
-      .font("Helvetica-Bold")
-      .fontSize(10)
-      .text("INFORME EJECUTIVO", 410, 34, {
-        width: 135,
-        align: "right"
-      });
-
-    doc
-      .fillColor("#e5e7eb")
-      .font("Helvetica")
-      .fontSize(8)
-      .text(fecha, 410, 58, {
-        width: 135,
-        align: "right"
-      });
-
-    doc.y = 125;
-
-    doc
-      .font("Helvetica-Bold")
-      .fontSize(16)
-      .fillColor("#111111")
-      .text(
-        tipo === "analisis_completo"
-          ? "Análisis estratégico completo"
-          : "Diagnóstico inicial",
-        {
-          width: 495
-        }
-      );
-
-    doc.moveDown(0.7);
-
-    doc
-      .font("Helvetica")
-      .fontSize(10)
-      .fillColor("#555555")
-      .text(
-        "Informe generado automáticamente por Problema Cero a partir de la información cargada por el usuario. El objetivo es aportar claridad, prioridad y dirección estratégica.",
-        {
-          width: 495,
-          lineGap: 3
-        }
-      );
-
-    tituloSeccion(doc, "Consulta original");
-    parrafo(doc, consultaOriginal);
+    portada(doc, datos);
+    paginaResumenCaso(doc, consultaOriginal);
 
     if (diagnosticoInicial) {
-      tituloSeccion(doc, "Diagnóstico inicial");
-      parrafo(doc, diagnosticoInicial);
+      escribirSeccionesPremium(doc, "Diagnóstico inicial", diagnosticoInicial);
     }
 
     if (analisisCompleto) {
-      tituloSeccion(doc, "Análisis completo");
-      parrafo(doc, analisisCompleto);
+      escribirSeccionesPremium(doc, "Análisis completo", analisisCompleto);
     }
 
-    tituloSeccion(doc, "Nota final");
-    parrafo(doc, "Este informe no promete resultados mágicos. Su función es ayudar a detectar el bloqueo principal, ordenar prioridades y facilitar mejores decisiones de negocio.");
-
-    agregarFooter(doc);
+    paginaCierre(doc);
 
     const range = doc.bufferedPageRange();
 
     for (let i = range.start; i < range.start + range.count; i++) {
       doc.switchToPage(i);
-
-      doc
-        .fontSize(8)
-        .fillColor("#777777")
-        .text(`Página ${i + 1} de ${range.count}`, 50, doc.page.height - 30, {
-          align: "right",
-          width: doc.page.width - 100
-        });
+      footer(doc, i + 1, range.count);
     }
 
     doc.end();
