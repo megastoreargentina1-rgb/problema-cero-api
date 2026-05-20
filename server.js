@@ -443,7 +443,7 @@ Cerrar con dirección.
 }
 
 /* =========================
-   MOTOR PDF PREMIUM V2
+   MOTOR PDF PREMIUM V2 CORREGIDO
    ========================= */
 
 const PDF_COLORS = {
@@ -501,14 +501,8 @@ function esTituloImportante(linea) {
     "QUE DEJAR DE HACER YA",
     "QUÉ CORREGIR PRIMERO",
     "QUE CORREGIR PRIMERO",
-    "PLAN DE ACCIÓN — PRÓXIMOS 7 DÍAS",
-    "PLAN DE ACCION — PROXIMOS 7 DIAS",
-    "PLAN DE ACCIÓN - PRÓXIMOS 7 DÍAS",
-    "PLAN DE ACCION - PROXIMOS 7 DIAS",
-    "PLAN DE ACCIÓN — PRÓXIMOS 30 DÍAS",
-    "PLAN DE ACCION — PROXIMOS 30 DIAS",
-    "PLAN DE ACCIÓN - PRÓXIMOS 30 DÍAS",
-    "PLAN DE ACCION - PROXIMOS 30 DIAS",
+    "PLAN DE ACCIÓN",
+    "PLAN DE ACCION",
     "CONTENIDO QUE DEBERÍA CREAR",
     "CONTENIDO QUE DEBERIA CREAR",
     "MENSAJES DE VENTA LISTOS PARA USAR",
@@ -527,27 +521,7 @@ function crearCodigoCaso() {
   return "PC-" + Date.now().toString().slice(-6);
 }
 
-function dibujarLogoMinimal(doc, x, y, size = 28) {
-  doc
-    .roundedRect(x, y, size, size, 7)
-    .fill(PDF_COLORS.white);
-
-  doc
-    .font("Helvetica-Bold")
-    .fontSize(17)
-    .fillColor(PDF_COLORS.dark)
-    .text("P", x + 8, y + 5);
-
-  doc
-    .strokeColor(PDF_COLORS.red)
-    .lineWidth(2)
-    .moveTo(x + size - 12, y + size - 9)
-    .lineTo(x + size - 5, y + size - 16)
-    .lineTo(x + size - 2, y + size - 13)
-    .stroke();
-}
-
-function footer(doc, pageNumber = null, totalPages = null) {
+function footer(doc) {
   const y = doc.page.height - 42;
 
   doc
@@ -570,18 +544,32 @@ function footer(doc, pageNumber = null, totalPages = null) {
     .font("Helvetica")
     .fontSize(8.5)
     .fillColor(PDF_COLORS.muted)
-    .text(
-      pageNumber && totalPages ? `Página ${pageNumber} de ${totalPages}` : "problemacero.com.ar",
-      345,
-      y,
-      {
-        width: 200,
-        align: "right"
-      }
-    );
+    .text("problemacero.com.ar", 345, y, {
+      width: 200,
+      align: "right"
+    });
+}
+
+function dibujarLogoMinimal(doc, x, y, size = 28) {
+  doc.roundedRect(x, y, size, size, 7).fill(PDF_COLORS.white);
+
+  doc
+    .font("Helvetica-Bold")
+    .fontSize(17)
+    .fillColor(PDF_COLORS.dark)
+    .text("P", x + 8, y + 5);
+
+  doc
+    .strokeColor(PDF_COLORS.red)
+    .lineWidth(2)
+    .moveTo(x + size - 12, y + size - 9)
+    .lineTo(x + size - 5, y + size - 16)
+    .lineTo(x + size - 2, y + size - 13)
+    .stroke();
 }
 
 function nuevaPagina(doc) {
+  footer(doc);
   doc.addPage();
   doc.y = 58;
 }
@@ -605,12 +593,9 @@ function escribirTexto(doc, texto, opciones = {}) {
 
   lineas.forEach(linea => {
     const t = linea.trim();
-    const height = doc.heightOfString(t, {
-      width,
-      lineGap
-    });
+    const height = doc.heightOfString(t, { width, lineGap });
 
-    asegurarEspacio(doc, height + 18);
+    asegurarEspacio(height + 18);
 
     doc
       .font(opciones.bold ? "Helvetica-Bold" : "Helvetica")
@@ -640,9 +625,9 @@ function bloqueEditorial(doc, titulo, texto, opciones = {}) {
     lineGap: 4
   });
 
-  const boxHeight = Math.min(Math.max(textHeight + 62, 125), 360);
+  const boxHeight = Math.min(Math.max(textHeight + 68, 130), 420);
 
-  asegurarEspacio(boxHeight + 22);
+  asegurarEspacio(boxHeight + 24);
 
   const startY = doc.y;
 
@@ -666,11 +651,10 @@ function bloqueEditorial(doc, titulo, texto, opciones = {}) {
     .font("Helvetica")
     .fontSize(10.5)
     .fillColor(PDF_COLORS.text)
-    .text(textoLimpio, x + padding, startY + 42, {
+    .text(textoLimpio, x + padding, startY + 44, {
       width: width - padding * 2,
       lineGap: 4,
-      height: boxHeight - 58,
-      ellipsis: false
+      height: boxHeight - 60
     });
 
   doc.y = startY + boxHeight + 18;
@@ -684,7 +668,6 @@ function portada(doc, datos) {
     : "Diagnóstico inicial";
 
   doc.rect(0, 0, doc.page.width, doc.page.height).fill(PDF_COLORS.white);
-
   doc.rect(0, 0, doc.page.width, 260).fill(PDF_COLORS.dark);
 
   dibujarLogoMinimal(doc, 48, 42, 34);
@@ -857,7 +840,6 @@ function extraerSecciones(texto) {
 
 function escribirSeccionesPremium(doc, tituloGeneral, texto) {
   const secciones = extraerSecciones(texto);
-
   if (secciones.length === 0) return;
 
   nuevaPagina(doc);
@@ -983,8 +965,7 @@ function generarPDFBuffer(datos) {
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({
       size: "A4",
-      margin: 48,
-      bufferPages: true
+      margin: 48
     });
 
     const chunks = [];
@@ -1010,12 +991,7 @@ function generarPDFBuffer(datos) {
 
     paginaCierre(doc);
 
-    const range = doc.bufferedPageRange();
-
-    for (let i = range.start; i < range.start + range.count; i++) {
-      doc.switchToPage(i);
-      footer(doc, i + 1, range.count);
-    }
+    footer(doc);
 
     doc.end();
   });
