@@ -17,7 +17,7 @@ const GOOGLE_PRIVATE_KEY = process.env.GOOGLE_PRIVATE_KEY
   : null;
 
 app.get("/", (req, res) => {
-  res.send("Problema Cero API profesional activa");
+  res.send("Problema Cero API profesional activa con CTA");
 });
 
 async function llamarGemini(prompt) {
@@ -473,6 +473,7 @@ app.post("/api/diagnostico", async (req, res) => {
     let cierre = "";
 
     if (!esAnalisisCompleto) {
+      // INYECCIÓN DE CTA (Call To Action) DIRECTO PARA RETORNO AL EMBUDO
       cierre = `
 
 ━━━━━━━━━━━━━━━━━━━━
@@ -486,7 +487,8 @@ Pero el cambio aparece cuando sabés:
 - qué dejar de hacer
 - y cómo ordenar los próximos pasos sin seguir probando cosas al azar.
 
-El análisis completo baja este diagnóstico a un plan concreto para tu negocio.
+**TU PRÓXIMO PASO:**
+Volvé a la pestaña de la web (problemacero.com.ar) y tocá el botón naranja para desbloquear tu Análisis Completo ahora mismo.
 
 No es más información.
 Es dirección clara.
