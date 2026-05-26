@@ -162,6 +162,13 @@ EVITAR:
 - “IA con alma”
 - “sos imparable”
 
+REGLA DE VOCABULARIO ESTRICTA (CRÍTICO):
+Escribe en español rioplatense o neutro, de forma natural, directa y ejecutiva. ESTÁ ESTRICTAMENTE PROHIBIDO usar anglicismos, traducciones literales del inglés de marketing, o jerga corporativa compleja. 
+- NO uses la palabra "curada" o "curar" referida a productos (usa "seleccionada" o "filtrada").
+- NO uses la palabra "cimentación" (usa "base", "estructura" o "cimientos").
+- NO uses la palabra "comoditización" (usa "producto genérico" o "pérdida de valor").
+El lenguaje debe ser quirúrgico, humano y fácil de entender para cualquier dueño de negocio de barrio o profesional.
+
 REGLAS DE FORMATO (CRÍTICO PARA RENDERIZADO DEL PDF):
 - Usa listas con viñetas (-) SIEMPRE que desgloses más de dos elementos.
 - Párrafos ultracortos. Máximo 2 o 3 líneas por bloque de texto. Cero densidad.
@@ -298,6 +305,13 @@ REGLA PRINCIPAL:
 No des más diagnóstico. Dá dirección.
 No des 20 consejos. Dá prioridades.
 No expliques eternamente el problema. Convertí el problema en decisiones.
+
+REGLA DE VOCABULARIO ESTRICTA (CRÍTICO):
+Escribe en español rioplatense o neutro, de forma natural, directa y ejecutiva. ESTÁ ESTRICTAMENTE PROHIBIDO usar anglicismos, traducciones literales del inglés de marketing, o jerga corporativa compleja. 
+- NO uses la palabra "curada" o "curar" referida a productos (usa "seleccionada" o "filtrada").
+- NO uses la palabra "cimentación" (usa "base", "estructura" o "cimientos").
+- NO uses la palabra "comoditización" (usa "producto genérico" o "pérdida de valor").
+El lenguaje debe ser quirúrgico, humano y fácil de entender para cualquier dueño de negocio de barrio o profesional.
 
 REGLAS DE FORMATO (CRÍTICO PARA RENDERIZADO DEL PDF):
 - Usa listas con viñetas (-) siempre que sea posible para máxima legibilidad.
