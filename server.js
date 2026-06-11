@@ -3,22 +3,27 @@ const cors = require("cors");
 const { google } = require("googleapis");
 require("dotenv").config();
 
+const motorDiagnostico = require("./motores/motorDiagnostico");
+
 const app = express();
 
 app.use(cors());
 app.use(express.json({ limit: "10mb" }));
 
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-
-const GOOGLE_SHEET_ID = process.env.GOOGLE_SHEET_ID;
+const GEMINI_API_KEY               = process.env.GEMINI_API_KEY;
+const GOOGLE_SHEET_ID              = process.env.GOOGLE_SHEET_ID;
 const GOOGLE_SERVICE_ACCOUNT_EMAIL = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
-const GOOGLE_PRIVATE_KEY = process.env.GOOGLE_PRIVATE_KEY
+const GOOGLE_PRIVATE_KEY           = process.env.GOOGLE_PRIVATE_KEY
   ? process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, "\n")
   : null;
 
+// ── HEALTH CHECK ────────────────────────────────────────────
+
 app.get("/", (req, res) => {
-  res.send("Problema Cero API profesional activa con CTA");
+  res.send("Problema Cero API v2.2 activa");
 });
+
+// ── GEMINI: SOLO REDACTA ────────────────────────────────────
 
 async function llamarGemini(prompt) {
   const aiRes = await fetch(
@@ -38,17 +43,20 @@ async function llamarGemini(prompt) {
     throw new Error(JSON.stringify(data.error));
   }
 
-  return data?.candidates?.[0]?.content?.parts?.[0]?.text || "No se pudo generar respuesta.";
+  return data?.candidates?.[0]?.content?.parts?.[0]?.text
+    || "No se pudo generar respuesta.";
 }
 
+// ── GOOGLE SHEETS ───────────────────────────────────────────
+
 async function guardarEnSheets(datos) {
-  if (!GOOGLE_SHEET_ID) throw new Error("Falta GOOGLE_SHEET_ID en Render.");
-  if (!GOOGLE_SERVICE_ACCOUNT_EMAIL) throw new Error("Falta GOOGLE_SERVICE_ACCOUNT_EMAIL en Render.");
-  if (!GOOGLE_PRIVATE_KEY) throw new Error("Falta GOOGLE_PRIVATE_KEY en Render.");
+  if (!GOOGLE_SHEET_ID)               throw new Error("Falta GOOGLE_SHEET_ID en Render.");
+  if (!GOOGLE_SERVICE_ACCOUNT_EMAIL)  throw new Error("Falta GOOGLE_SERVICE_ACCOUNT_EMAIL en Render.");
+  if (!GOOGLE_PRIVATE_KEY)            throw new Error("Falta GOOGLE_PRIVATE_KEY en Render.");
 
   const auth = new google.auth.JWT({
-    email: GOOGLE_SERVICE_ACCOUNT_EMAIL,
-    key: GOOGLE_PRIVATE_KEY,
+    email:  GOOGLE_SERVICE_ACCOUNT_EMAIL,
+    key:    GOOGLE_PRIVATE_KEY,
     scopes: ["https://www.googleapis.com/auth/spreadsheets"]
   });
 
@@ -61,17 +69,17 @@ async function guardarEnSheets(datos) {
     requestBody: {
       values: [[
         new Date().toLocaleString("es-AR"),
-        datos.userId || "",
-        datos.tipo || "",
-        datos.consultaOriginal || "",
+        datos.userId             || "",
+        datos.tipo               || "",
+        datos.consultaOriginal   || "",
         datos.diagnosticoInicial || "",
-        datos.respuesta1 || "",
-        datos.respuesta2 || "",
-        datos.respuesta3 || "",
-        datos.feedback1 || "",
-        datos.feedback2 || "",
-        datos.feedback3 || "",
-        datos.analisisCompleto || ""
+        datos.respuesta1         || "",
+        datos.respuesta2         || "",
+        datos.respuesta3         || "",
+        datos.feedback1          || "",
+        datos.feedback2          || "",
+        datos.feedback3          || "",
+        datos.analisisCompleto   || ""
       ]]
     }
   });
@@ -79,50 +87,81 @@ async function guardarEnSheets(datos) {
   return true;
 }
 
-function crearPromptDiagnostico(problem) {
+// ── PROMPTS PARA GEMINI ─────────────────────────────────────
+// Gemini NO decide bloqueo ni causa raíz.
+// Recibe el objeto diagnóstico ya calculado y lo redacta.
+
+function crearPromptDiagnostico(diagnostico, consultaOriginal) {
+
+  const bloqueoPrincipal   = diagnostico.bloqueoPrincipal  || "No identificado";
+  const bloqueoSecundario  = diagnostico.bloqueoSecundario || "No identificado";
+  const causaRaizNombre    = diagnostico.causaRaiz?.causaRaiz || "No determinada";
+  const estadoCausa        = diagnostico.causaRaiz?.estado    || "";
+  const autorizada         = diagnostico.causaRaiz?.autorizada;
+  const prioridad1         = diagnostico.prioridades?.[0];
+  const madurez            = diagnostico.madurez;
+
+  const reglaCerteza = autorizada
+    ? 'El diagnóstico tiene suficiente evidencia. Podés afirmar "El problema principal es..."'
+    : 'El diagnóstico NO está completamente confirmado. Usá "La evidencia sugiere..." o "La hipótesis más fuerte es..."';
+
   return `
 Actuá como Problema Cero.
 
-Problema Cero es un sistema de diagnóstico estratégico para negocios High-Ticket y un Chief Product Officer (CPO) de élite.
-
+Problema Cero es un sistema de diagnóstico estratégico para negocios.
 No fue creado para motivar personas.
-No fue creado para dar consejos genéricos ni palmaditas en la espalda.
 Fue creado para entregar estructura, detectar fallas y ordenar negocios.
 
-CASO:
-${problem}
+Tu tarea es ÚNICAMENTE redactar el diagnóstico en lenguaje natural.
+NO decidís el bloqueo. NO calculás la causa raíz. Eso ya está calculado.
+Solo convertís el objeto de diagnóstico en texto claro, humano y ejecutivo.
 
-OBJETIVO:
-Que el emprendedor sienta: “Estoy hablando con un consultor experto que entiende mi negocio y me habla de igual a igual”.
+CASO DEL USUARIO:
+${consultaOriginal}
+
+DIAGNÓSTICO CALCULADO POR EL SISTEMA:
+- Nivel de madurez del negocio: ${madurez?.nivel || "No determinado"}
+- Descripción de madurez: ${madurez?.descripcion || ""}
+- Índice de confianza diagnóstica (ICD): ${diagnostico.icd}
+- Estado del diagnóstico: ${diagnostico.estadoDiagnostico}
+- Bloqueo principal detectado: ${bloqueoPrincipal}
+- Bloqueo secundario detectado: ${bloqueoSecundario}
+- Causa raíz: ${causaRaizNombre}
+- Estado de causa raíz: ${estadoCausa}
+- Diagnóstico autorizado: ${autorizada ? "SÍ" : "NO"}
+- Prioridad principal: ${prioridad1?.bloqueo || "No definida"}
+- Descripción de prioridad: ${prioridad1?.descripcion || ""}
+
+REGLA DE CERTEZA:
+${reglaCerteza}
 
 IDENTIDAD:
-- Humano y Empático: Entiendes su esfuerzo sin condescendencia.
-- Directo y con Autoridad: Eres un profesional de alto nivel.
-- Natural: NUNCA reveles que eres una IA.
+- Humano y empático. Entendés su esfuerzo sin condescendencia.
+- Directo y con autoridad. Sos un profesional de alto nivel.
+- Nunca revelás que sos una IA.
+- Hablás en español rioplatense natural. No usás "usted".
 
-REGLA DE VOCABULARIO ESTRICTA Y TONO CORPORATIVO (CRÍTICO):
-- PROHIBICIÓN ABSOLUTA: Tienes estrictamente prohibido utilizar metáforas médicas, clínicas, anatómicas o de salud. 
-- PALABRAS CLÍNICAS BLOQUEADAS: hemorragia, ir al hueso, síntoma, radiografía, bisturí, recetar, tratamiento, paciente, curita, curar, enfermedad, dolor agudo.
-- PROHIBICIÓN DE TONO AGRESIVO O INFORMAL: NO uses términos despectivos, informales o que suenen a "gurú" de internet regañando al cliente.
-- PALABRAS DE BAJO NIVEL BLOQUEADAS: barato, barata, supermercado, del montón, mediocre, pobre, estrategias pobres.
-- LENGUAJE PERMITIDO: Usa lenguaje empresarial de alta gerencia. Sé firme pero educado y elegante. (Ej: usa "opción de bajo costo" en lugar de "barato", o "descuento masivo" en lugar de "supermercado").
-- NO uses: "curada", "cimentación", "comoditización". Escribe en español rioplatense natural, directo y de alto valor.
+REGLA DE VOCABULARIO:
+- PROHIBIDO: metáforas médicas o clínicas (hemorragia, síntoma, bisturí, paciente, etc.)
+- PROHIBIDO: tono de gurú, motivacional o genérico
+- PROHIBIDO: frases vacías como "¡Excelente!" o "Gran pregunta"
+- PERMITIDO: lenguaje empresarial de alta gerencia, directo y humano
 
-REGLAS DE FORMATO (CRÍTICO PARA RENDERIZADO DEL PDF):
-- Usa listas con viñetas (-) SIEMPRE que desgloses más de dos elementos.
-- Párrafos ultracortos. Máximo 2 o 3 líneas.
-- Usa **negritas** solo para resaltar el concepto central.
-- Usa EXACTAMENTE los títulos indicados abajo. No alteres ni una letra ni un emoji.
+REGLAS DE FORMATO:
+- Párrafos cortos. Máximo 2 o 3 líneas.
+- Usá viñetas (-) cuando desglosés más de dos elementos.
+- Usá **negritas** solo para el concepto central.
+- Usá EXACTAMENTE los títulos indicados abajo.
 
 ESTRUCTURA OBLIGATORIA:
 
 ⚡ RESUMEN RÁPIDO
 
 👉 Tu problema principal:
-Una frase específica y concreta sobre su falla estructural.
+Una frase específica y concreta sobre la falla estructural.
 
 👉 Qué está pasando:
-Qué ocurre realmente (usa viñetas si son varios puntos).
+Qué ocurre realmente (usá viñetas si son varios puntos).
 
 👉 Qué deberías corregir primero:
 La prioridad principal en formato directo.
@@ -131,14 +170,13 @@ La prioridad principal en formato directo.
 
 🔴 PROBLEMA PRINCIPAL
 
-Explicá el problema dominante basándote en los 4 Pilares (Tracción, Conversión, Operación, Finanzas).
-Máximo 3 párrafos cortos.
+Explicá el problema dominante. Máximo 3 párrafos cortos.
 
 ━━━━━━━━━━━━━━━━━━━━
 
 🧠 QUÉ SIGNIFICA
 
-Cómo impacta en su negocio (usa viñetas):
+Cómo impacta en su negocio (usá viñetas):
 - ventas
 - conversión
 - posicionamiento
@@ -147,7 +185,7 @@ Cómo impacta en su negocio (usa viñetas):
 
 ⚠️ CAUSA REAL
 
-Explicá la raíz técnica de la falla en párrafos cortos. Conectá la causa con su caso.
+Explicá la raíz de la falla en párrafos cortos. Conectá la causa con su caso específico.
 
 ━━━━━━━━━━━━━━━━━━━━
 
@@ -155,7 +193,7 @@ Explicá la raíz técnica de la falla en párrafos cortos. Conectá la causa co
 
 Indicá (con viñetas):
 - qué corregir primero
-- qué dejar de hacer HOY para no perder dinero
+- qué dejar de hacer HOY
 - qué ajustar
 
 ━━━━━━━━━━━━━━━━━━━━
@@ -172,30 +210,48 @@ Cierre breve. Consultor estratégico real. Humano. Preciso. Sin sonar robótico 
 `;
 }
 
-function crearPromptAnalisisCompleto(problem) {
+function crearPromptAnalisisCompleto(diagnostico, consultaOriginal) {
+
+  const bloqueoPrincipal  = diagnostico.bloqueoPrincipal  || "No identificado";
+  const bloqueoSecundario = diagnostico.bloqueoSecundario || "No identificado";
+  const causaRaizNombre   = diagnostico.causaRaiz?.causaRaiz || "No determinada";
+  const estadoCausa       = diagnostico.causaRaiz?.estado    || "";
+  const prioridad1        = diagnostico.prioridades?.[0];
+  const prioridad2        = diagnostico.prioridades?.[1];
+
   return `
 Actuá como Problema Cero en MODO ANÁLISIS COMPLETO.
 
-Tu objetivo es ordenar, priorizar y dar un mapa de ejecución quirúrgico.
+Tu tarea es ÚNICAMENTE redactar el plan de acción en lenguaje natural.
+El diagnóstico ya está calculado. No lo repetís. No lo recalculás.
+Convertís el objeto diagnóstico en un mapa de ejecución concreto.
 
-CASO COMPLETO:
-${problem}
+CASO DEL USUARIO:
+${consultaOriginal}
+
+DIAGNÓSTICO CALCULADO POR EL SISTEMA:
+- Nivel de madurez del negocio: ${diagnostico.madurez?.nivel || "No determinado"}
+- Bloqueo principal: ${bloqueoPrincipal}
+- Bloqueo secundario: ${bloqueoSecundario}
+- Causa raíz: ${causaRaizNombre}
+- Estado de causa raíz: ${estadoCausa}
+- Prioridad 1: ${prioridad1?.bloqueo || ""} — ${prioridad1?.descripcion || ""}
+- Prioridad 2: ${prioridad2?.bloqueo || ""} — ${prioridad2?.descripcion || ""}
 
 IDENTIDAD:
-Sos un estratega humano premium. Claro. Directo. Ejecutivo. Hablas de emprendedor a emprendedor.
+Sos un estratega humano premium. Claro. Directo. Ejecutivo.
+Sin sonar frío, soberbio ni corporativo.
+Hablás en español rioplatense natural. No usás "usted".
 
-REGLA DE VOCABULARIO ESTRICTA Y TONO CORPORATIVO (CRÍTICO):
-- PROHIBICIÓN ABSOLUTA: Tienes estrictamente prohibido utilizar metáforas médicas, clínicas, anatómicas o de salud. 
-- PALABRAS CLÍNICAS BLOQUEADAS: hemorragia, ir al hueso, síntoma, radiografía, bisturí, recetar, tratamiento, paciente, curita, curar, enfermedad, dolor agudo.
-- PROHIBICIÓN DE TONO AGRESIVO O INFORMAL: NO uses términos despectivos, informales o que suenen a "gurú" de internet regañando al cliente.
-- PALABRAS DE BAJO NIVEL BLOQUEADAS: barato, barata, supermercado, del montón, mediocre, pobre, estrategias pobres.
-- LENGUAJE PERMITIDO: Usa lenguaje empresarial de alta gerencia. Sé firme pero educado y elegante. (Ej: usa "opción de bajo costo" en lugar de "barato", o "descuento masivo" en lugar de "supermercado").
-- NO uses: "curada", "cimentación", "comoditización". Escribe en español rioplatense natural, directo y de alto valor.
+REGLA DE VOCABULARIO:
+- PROHIBIDO: metáforas médicas o clínicas
+- PROHIBIDO: tono de gurú, motivacional o genérico
+- PERMITIDO: español rioplatense natural, directo y de alto valor
 
-REGLAS DE FORMATO (CRÍTICO PARA RENDERIZADO DEL PDF):
-- Usa listas con viñetas (-) siempre.
-- Párrafos de 1 a 3 líneas. 
-- MANTÉN LOS TÍTULOS EXACTOS con sus emojis. El sistema de maquetación los lee literalmente.
+REGLAS DE FORMATO:
+- Párrafos de 1 a 3 líneas.
+- Viñetas (-) siempre que sea posible.
+- MANTENÉ LOS TÍTULOS EXACTOS con sus emojis.
 
 FORMATO OBLIGATORIO:
 
@@ -203,31 +259,30 @@ FORMATO OBLIGATORIO:
 
 🧭 MAPA EJECUTIVO
 
-En 4 a 6 líneas, explicá usando una lista de viñetas cuál es el bloqueo principal y qué resultado buscar.
+En 4 a 6 viñetas: bloqueo confirmado, qué consume energía, qué corregir primero, resultado a buscar.
 
 ━━━━━━━━━━━━━━━━━━━━
 
 🎯 PRIORIDAD ABSOLUTA
 
-Definí UNA prioridad principal. ¿Qué debe corregir esta semana y por qué?
+UNA prioridad. Qué corregir, por qué va primero, qué pasa si lo sigue postergando.
 
 ━━━━━━━━━━━━━━━━━━━━
 
 🛑 QUÉ DEJAR DE HACER YA
 
-Indicá de 3 a 5 cosas que debe detener INMEDIATAMENTE porque le hacen perder tiempo/dinero (en viñetas).
+De 3 a 5 cosas concretas (viñetas). Sin generalidades.
 
 ━━━━━━━━━━━━━━━━━━━━
 
 🔧 QUÉ CORREGIR PRIMERO
 
-Dá de 3 a 5 correcciones concretas (qué cambiar, cómo y para qué).
+De 3 a 5 correcciones. Cada una: qué cambiar, cómo, para qué.
 
 ━━━━━━━━━━━━━━━━━━━━
 
 📅 PLAN DE ACCIÓN — PRÓXIMOS 7 DÍAS
 
-Usa una lista exacta:
 - **Día 1:** [Acción]
 - **Día 2:** [Acción]
 - **Día 3:** [Acción]
@@ -239,218 +294,46 @@ Usa una lista exacta:
 ━━━━━━━━━━━━━━━━━━━━
 
 📆 PLAN DE ACCIÓN — PRÓXIMOS 30 DÍAS
-
-Dividilo en 4 semanas claras (Objetivo y Acción).
-
-━━━━━━━━━━━━━━━━━━━━
-
-📌 CONTENIDO QUE DEBERÍA CREAR
-
-Dá 5 ideas de contenido aplicadas a su rubro (Gancho inicial, Tema, Objetivo).
-
-━━━━━━━━━━━━━━━━━━━━
-
-💬 MENSAJES DE VENTA LISTOS PARA USAR
-
-Dá 3 mensajes concretos y humanos para su negocio.
-
-━━━━━━━━━━━━━━━━━━━━
-
-📊 MÉTRICA QUE DEBERÍA MIRAR
-
-Elegí 1 o 2 métricas crudas y reales que deba vigilar para saber si el plan funciona.
-
-━━━━━━━━━━━━━━━━━━━━
-
-⚠️ SI / ENTONCES
-
-Dá 3 reglas de decisión (Si pasa X, entonces hacer Y).
-
-━━━━━━━━━━━━━━━━━━━━
-
-🧠 CIERRE ESTRATÉGICO
-
-Cierre breve, humano y firme. Dejando claro que el plan es su estructura a seguir.
-`;
-}
-
-function crearPromptAnalisisCompleto(problem) {
-  return `
-Actuá como Problema Cero en MODO ANÁLISIS COMPLETO.
-
-Este modo NO debe repetir el diagnóstico inicial.
-
-El diagnóstico inicial detecta.
-El análisis completo dirige.
-
-Tu objetivo ahora NO es explicar más.
-Tu objetivo es ordenar, priorizar y dar un mapa de ejecución concreto.
-
-CASO COMPLETO:
-${problem}
-
-OBJETIVO EMOCIONAL DEL USUARIO:
-Al terminar, la persona debe sentir:
-1. “Me mostró errores que no estaba viendo.”
-2. “Me ordenó completamente la cabeza.”
-3. “Ahora sé exactamente qué hacer primero.”
-
-IDENTIDAD:
-Sos un estratega humano premium. Claro. Directo. Profundo. Ejecutivo. Pero sin sonar frío, soberbio ni corporativo.
-
-NO USAR:
-- lenguaje demasiado técnico innecesario
-- frases de gurú
-- motivación barata
-- teoría larga
-- explicaciones repetidas
-- promesas mágicas
-- tono Silicon Valley exagerado
-
-REGLA PRINCIPAL:
-No des más diagnóstico. Dá dirección.
-No des 20 consejos. Dá prioridades.
-No expliques eternamente el problema. Convertí el problema en decisiones.
-
-REGLA DE VOCABULARIO ESTRICTA (CRÍTICO):
-Escribe en español rioplatense o neutro, de forma natural, directa y ejecutiva. ESTÁ ESTRICTAMENTE PROHIBIDO usar anglicismos, traducciones literales del inglés de marketing, o jerga corporativa compleja. 
-- NO uses la palabra "curada" o "curar" referida a productos (usa "seleccionada" o "filtrada").
-- NO uses la palabra "cimentación" (usa "base", "estructura" o "cimientos").
-- NO uses la palabra "comoditización" (usa "producto genérico" o "pérdida de valor").
-El lenguaje debe ser quirúrgico, humano y fácil de entender para cualquier dueño de negocio de barrio o profesional.
-
-REGLAS DE FORMATO (CRÍTICO PARA RENDERIZADO DEL PDF):
-- Usa listas con viñetas (-) siempre que sea posible para máxima legibilidad.
-- Escribe en párrafos de 1 a 3 líneas. El diseño bimodal exige textos escaneables.
-- Aplica **negritas** de forma quirúrgica para guiar el ojo hacia la acción clave.
-- MANTÉN LOS TÍTULOS EXACTOS. El sistema de maquetación los lee literalmente para estructurar el dossier A4.
-
-FORMATO OBLIGATORIO:
-
-━━━━━━━━━━━━━━━━━━━━
-
-🧭 MAPA EJECUTIVO
-
-En 4 a 6 líneas, explicá usando una lista de viñetas:
-- cuál es el bloqueo principal confirmado
-- qué está consumiendo energía
-- qué debe corregirse primero
-- qué resultado concreto debe buscarse
-
-━━━━━━━━━━━━━━━━━━━━
-
-🎯 PRIORIDAD ABSOLUTA
-
-Definí UNA prioridad principal.
-
-Debe responder en párrafos cortos:
-“Si esta persona solo pudiera corregir una cosa esta semana, ¿cuál sería?”
-
-Explicá (usando viñetas si es necesario):
-- qué corregir
-- por qué eso va primero
-- qué pasa si lo sigue postergando
-
-━━━━━━━━━━━━━━━━━━━━
-
-🛑 QUÉ DEJAR DE HACER YA
-
-Indicá de 3 a 5 cosas concretas que debe dejar de hacer, usando una lista de viñetas clara.
-
-No digas generalidades.
-No digas “mejorar marketing”.
-
-━━━━━━━━━━━━━━━━━━━━
-
-🔧 QUÉ CORREGIR PRIMERO
-
-Dá de 3 a 5 correcciones concretas numeradas o en viñetas.
-
-Cada corrección debe tener:
-- qué cambiar
-- cómo cambiarlo
-- para qué sirve
-
-━━━━━━━━━━━━━━━━━━━━
-
-📅 PLAN DE ACCIÓN — PRÓXIMOS 7 DÍAS
-
-Usa una lista exacta:
-- **Día 1:** [Acción]
-- **Día 2:** [Acción]
-- **Día 3:** [Acción]
-- **Día 4:** [Acción]
-- **Día 5:** [Acción]
-- **Día 6:** [Acción]
-- **Día 7:** [Acción]
-
-Cada día debe tener una acción concreta y realista.
-
-━━━━━━━━━━━━━━━━━━━━
-
-📆 PLAN DE ACCIÓN — PRÓXIMOS 30 DÍAS
-
-Dividilo en 4 semanas claras:
 
 - **Semana 1:** [Objetivo y Acción]
 - **Semana 2:** [Objetivo y Acción]
 - **Semana 3:** [Objetivo y Acción]
 - **Semana 4:** [Objetivo y Acción]
 
-Detalla en viñetas el resultado esperado de cada bloque.
-
 ━━━━━━━━━━━━━━━━━━━━
 
 📌 CONTENIDO QUE DEBERÍA CREAR
 
-Dá 5 ideas de contenido aplicadas al rubro del usuario, listadas.
-
-Cada idea debe incluir:
-- **Gancho inicial:**
-- **Tema:**
-- **Objetivo del contenido:**
+5 ideas aplicadas al rubro. Cada una con Gancho, Tema y Objetivo.
 
 ━━━━━━━━━━━━━━━━━━━━
 
 💬 MENSAJES DE VENTA LISTOS PARA USAR
 
-Dá 3 mensajes concretos usando viñetas o bloques separados que el usuario pueda adaptar y usar.
-
-Deben sonar humanos, claros y aplicados al negocio.
+3 mensajes concretos, humanos, aplicados al negocio.
 
 ━━━━━━━━━━━━━━━━━━━━
 
 📊 MÉTRICA QUE DEBERÍA MIRAR
 
-Elegí 1 a 3 métricas importantes según el caso, en formato de lista.
-
-Explicá para cada una:
-- qué mirar
-- por qué importa
-- qué decisión tomar según el resultado
+1 a 3 métricas. Para cada una: qué mirar, por qué importa, qué decisión tomar.
 
 ━━━━━━━━━━━━━━━━━━━━
 
 ⚠️ SI / ENTONCES
 
-Dá 3 reglas de decisión en lista.
-
-Formato:
+3 reglas de decisión:
 - **Si** pasa X, **entonces** hacer Y.
-- **Si no** pasa X, **entonces** corregir Z.
 
 ━━━━━━━━━━━━━━━━━━━━
 
 🧠 CIERRE ESTRATÉGICO
 
-Cierre breve, humano y firme. Párrafos de 1 o 2 líneas máximo.
-
-Debe dejar esta sensación:
-“El problema no era hacer más. Era saber qué hacer primero.”
-
-NO repetir que “este es el primer nivel”. NO vender otro análisis. NO cerrar con motivación. Cerrar con dirección.
+Cierre breve, humano y firme. Sin motivación. Con dirección.
 `;
 }
+
+// ── ENDPOINT PRINCIPAL ──────────────────────────────────────
 
 app.post("/api/diagnostico", async (req, res) => {
   try {
@@ -466,20 +349,29 @@ app.post("/api/diagnostico", async (req, res) => {
       feedback3
     } = req.body;
 
+    const textoConsulta = consultaOriginal || problem || "";
+
     const esAnalisisCompleto =
-      typeof problem === "string" &&
-      problem.toUpperCase().includes("ANÁLISIS COMPLETO");
+      typeof textoConsulta === "string" &&
+      textoConsulta.toUpperCase().includes("ANÁLISIS COMPLETO");
 
+    // ── PASO 1: LOS MOTORES CALCULAN ──────────────────────
+    // El texto del formulario entra al motorDiagnostico.
+    // El motorInterprete lo traduce a evidencias.
+    // Los demás motores calculan el diagnóstico.
+    // Gemini no decide nada.
+    const diagnostico = motorDiagnostico(textoConsulta);
+
+    // ── PASO 2: GEMINI SOLO REDACTA ───────────────────────
     const prompt = esAnalisisCompleto
-      ? crearPromptAnalisisCompleto(problem)
-      : crearPromptDiagnostico(problem);
+      ? crearPromptAnalisisCompleto(diagnostico, textoConsulta)
+      : crearPromptDiagnostico(diagnostico, textoConsulta);
 
-    const respuesta = await llamarGemini(prompt);
+    const respuestaGemini = await llamarGemini(prompt);
 
+    // ── PASO 3: CTA PARA DIAGNÓSTICO INICIAL ──────────────
     let cierre = "";
-
     if (!esAnalisisCompleto) {
-      // INYECCIÓN DE CTA (Call To Action) DIRECTO PARA RETORNO AL EMBUDO
       cierre = `
 
 ━━━━━━━━━━━━━━━━━━━━
@@ -491,7 +383,7 @@ Detectar el problema es importante.
 Pero el cambio aparece cuando sabés:
 - qué corregir primero
 - qué dejar de hacer
-- y cómo ordenar los próximos pasos sin seguir probando cosas al azar.
+- cómo ordenar los próximos pasos sin seguir probando cosas al azar.
 
 **TU PRÓXIMO PASO:**
 Volvé a la pestaña de la web (problemacero.com.ar) y tocá el botón naranja para desbloquear tu Análisis Completo ahora mismo.
@@ -501,80 +393,66 @@ Es dirección clara.
 `;
     }
 
-    const resultadoFinal = respuesta + cierre;
+    const resultadoFinal = respuestaGemini + cierre;
 
+    // ── PASO 4: GUARDAR EN SHEETS ─────────────────────────
     try {
       await guardarEnSheets({
         userId,
-        tipo: esAnalisisCompleto ? "analisis_completo" : "diagnostico_inicial",
-        consultaOriginal: esAnalisisCompleto ? (consultaOriginal || "") : (problem || ""),
+        tipo:               esAnalisisCompleto ? "analisis_completo" : "diagnostico_inicial",
+        consultaOriginal:   textoConsulta,
         diagnosticoInicial: esAnalisisCompleto ? "" : resultadoFinal,
-        respuesta1: respuesta1 || "",
-        respuesta2: respuesta2 || "",
-        respuesta3: respuesta3 || "",
-        feedback1: feedback1 || "",
-        feedback2: feedback2 || "",
-        feedback3: feedback3 || "",
-        analisisCompleto: esAnalisisCompleto ? resultadoFinal : ""
+        respuesta1:         respuesta1  || "",
+        respuesta2:         respuesta2  || "",
+        respuesta3:         respuesta3  || "",
+        feedback1:          feedback1   || "",
+        feedback2:          feedback2   || "",
+        feedback3:          feedback3   || "",
+        analisisCompleto:   esAnalisisCompleto ? resultadoFinal : ""
       });
     } catch (sheetError) {
       console.error("Error guardando en Sheets:", sheetError.message);
     }
 
     res.json({
-      ok: true,
+      ok:          true,
       diagnostico: resultadoFinal
     });
 
   } catch (error) {
     console.error("Error diagnóstico:", error);
-
     res.status(500).json({
-      error: "Error diagnóstico",
+      error:   "Error diagnóstico",
       detalle: error.message
     });
   }
 });
 
+// ── ENDPOINTS DE DEBUG ──────────────────────────────────────
+
 app.get("/api/test-sheets", async (req, res) => {
   try {
     await guardarEnSheets({
-      userId: "test_render",
-      tipo: "test",
-      consultaOriginal: "Prueba técnica desde Render",
+      userId:             "test_render",
+      tipo:               "test",
+      consultaOriginal:   "Prueba técnica desde Render",
       diagnosticoInicial: "Si aparece esta fila, Google Sheets está conectado correctamente.",
-      respuesta1: "Respuesta 1 de prueba",
-      respuesta2: "Respuesta 2 de prueba",
-      respuesta3: "Respuesta 3 de prueba",
-      feedback1: "Feedback 1 de prueba",
-      feedback2: "Feedback 2 de prueba",
-      feedback3: "Feedback 3 de prueba",
-      analisisCompleto: "Análisis completo de prueba"
+      respuesta1: "", respuesta2: "", respuesta3: "",
+      feedback1:  "", feedback2:  "", feedback3:  "",
+      analisisCompleto: "Prueba"
     });
-
-    res.json({
-      ok: true,
-      mensaje: "Guardado clínico REAL confirmado en Google Sheets"
-    });
-
+    res.json({ ok: true, mensaje: "Guardado confirmado en Google Sheets" });
   } catch (error) {
-    console.error("TEST SHEETS ERROR:", error);
-
-    res.status(500).json({
-      ok: false,
-      mensaje: "NO se pudo guardar en Google Sheets",
-      error: error.message,
-      detalle: String(error)
-    });
+    res.status(500).json({ ok: false, mensaje: "NO se pudo guardar", error: error.message });
   }
 });
 
 app.get("/api/debug-env", (req, res) => {
   res.json({
-    geminiApiKey: GEMINI_API_KEY ? "OK" : "FALTA",
-    sheetId: GOOGLE_SHEET_ID ? "OK" : "FALTA",
-    serviceEmail: GOOGLE_SERVICE_ACCOUNT_EMAIL ? "OK" : "FALTA",
-    privateKey: GOOGLE_PRIVATE_KEY ? "OK" : "FALTA",
+    geminiApiKey:              GEMINI_API_KEY               ? "OK" : "FALTA",
+    sheetId:                   GOOGLE_SHEET_ID              ? "OK" : "FALTA",
+    serviceEmail:              GOOGLE_SERVICE_ACCOUNT_EMAIL ? "OK" : "FALTA",
+    privateKey:                GOOGLE_PRIVATE_KEY           ? "OK" : "FALTA",
     privateKeyStartsCorrectly: GOOGLE_PRIVATE_KEY
       ? GOOGLE_PRIVATE_KEY.startsWith("-----BEGIN PRIVATE KEY-----")
       : false,
@@ -584,8 +462,40 @@ app.get("/api/debug-env", (req, res) => {
   });
 });
 
+app.get("/api/debug-motores", (req, res) => {
+  try {
+    const textoTest = `EL NEGOCIO:
+1. Vendo ropa urbana.
+2. Apunto a jóvenes de 18 a 30 años.
+3. Arranqué hace 1 año.
+
+EL PROBLEMA ELEGIDO Y DETALLE:
+1. Opción 1.
+2. Me llegan mensajes preguntando el precio y después no responden más.
+
+LAS BASES DEL NEGOCIO:
+1. Defino precios mirando la competencia.
+2. Solo vendo por Instagram.
+3. Dependo del boca a boca.
+4. Trabajo completamente solo.
+
+EL PUNTO DE BLOQUEO:
+1. Opción 2. Tengo consultas pero no logro cerrar las ventas.
+
+EL OBJETIVO A 90 DÍAS:
+1. Quiero tener 5 clientes fijos por mes sin competir por precio.`;
+
+    const resultado = motorDiagnostico(textoTest);
+    res.json({ ok: true, diagnostico: resultado });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+// ── ARRANQUE ────────────────────────────────────────────────
+
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
-  console.log("Servidor Problema Cero profesional activo");
+  console.log(`Problema Cero v2.2 activo en puerto ${PORT}`);
 });
