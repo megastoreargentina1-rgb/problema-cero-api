@@ -383,7 +383,19 @@ app.post("/api/diagnostico", async (req, res) => {
     let mensajes   = [];
 
     if (esAnalisisCompleto) {
+      // LOGS DE DIAGNÓSTICO — remover después de confirmar
+      console.log("=== DIAGNÓSTICO GEMINI ===");
+      console.log("PRIMEROS 300 CHARS:", respuestaGemini.slice(0, 300));
+
       const jsonExtraido = extraerJSON(respuestaGemini);
+
+      console.log("JSON EXTRAIDO OK:", !!jsonExtraido);
+      console.log("TIENE textoNarrativo:", !!jsonExtraido?.textoNarrativo);
+      console.log("PRIMEROS 100 DE textoNarrativo:", jsonExtraido?.textoNarrativo?.slice(0, 100) || "UNDEFINED");
+      console.log("plan7Dias es array:", Array.isArray(jsonExtraido?.plan7Dias));
+      console.log("plan7Dias length:", jsonExtraido?.plan7Dias?.length || 0);
+      console.log("=========================");
+
       if (jsonExtraido && jsonExtraido.textoNarrativo) {
         resultadoFinal = jsonExtraido.textoNarrativo;
         plan7Dias  = Array.isArray(jsonExtraido.plan7Dias)  ? jsonExtraido.plan7Dias  : [];
@@ -391,11 +403,10 @@ app.post("/api/diagnostico", async (req, res) => {
         contenidos = Array.isArray(jsonExtraido.contenidos) ? jsonExtraido.contenidos : [];
         escenarios = Array.isArray(jsonExtraido.escenarios) ? jsonExtraido.escenarios : [];
         mensajes   = Array.isArray(jsonExtraido.mensajes)   ? jsonExtraido.mensajes   : [];
-        console.log("✅ JSON estructurado OK");
+        console.log("✅ JSON estructurado OK — textoNarrativo extraído");
       } else {
-        // FALLBACK — Gemini no devolvió JSON válido, usar texto completo
         resultadoFinal = respuestaGemini;
-        console.warn("⚠️ Fallback activo: Gemini no devolvió JSON válido");
+        console.warn("⚠️ Fallback activo — causa: jsonExtraido=" + !!jsonExtraido + " textoNarrativo=" + !!jsonExtraido?.textoNarrativo);
       }
     } else {
       // Diagnóstico inicial — flujo sin cambios
