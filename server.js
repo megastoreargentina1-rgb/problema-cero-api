@@ -25,26 +25,45 @@ app.get("/", (req, res) => {
 
 // ── GEMINI: SOLO REDACTA ────────────────────────────────────
 
-async function llamarGemini(prompt) {
-  const aiRes = await fetch(
-    `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }]
-      })
+async function llamarGemini(prompt, intentos = 3) {
+  for (let i = 0; i < intentos; i++) {
+    try {
+      const aiRes = await fetch(
+        `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }]
+          })
+        }
+      );
+
+      const data = await aiRes.json();
+
+      if (data.error) {
+        const codigo = data.error.code || 0;
+        // Si es 503 (sobrecarga) y quedan intentos, esperar y reintentar
+        if (codigo === 503 && i < intentos - 1) {
+          console.warn(`⚠️ Gemini 503 — reintento ${i + 1}/${intentos - 1}`);
+          await new Promise(r => setTimeout(r, 3000));
+          continue;
+        }
+        throw new Error(JSON.stringify(data.error));
+      }
+
+      return data?.candidates?.[0]?.content?.parts?.[0]?.text
+        || "No se pudo generar respuesta.";
+
+    } catch (err) {
+      if (i < intentos - 1) {
+        console.warn(`⚠️ Error Gemini — reintento ${i + 1}: ${err.message}`);
+        await new Promise(r => setTimeout(r, 2000));
+      } else {
+        throw err;
+      }
     }
-  );
-
-  const data = await aiRes.json();
-
-  if (data.error) {
-    throw new Error(JSON.stringify(data.error));
   }
-
-  return data?.candidates?.[0]?.content?.parts?.[0]?.text
-    || "No se pudo generar respuesta.";
 }
 
 // ── EXTRAER JSON DE RESPUESTA DE GEMINI ─────────────────────
@@ -52,14 +71,30 @@ async function llamarGemini(prompt) {
 // Esta función extrae solo el objeto JSON válido.
 
 function extraerJSON(texto) {
+  if (!texto) return null;
   try {
+    // Intento 1: parsear directo
+    return JSON.parse(texto.trim());
+  } catch (e1) {}
+  try {
+    // Intento 2: extraer entre primera { y última }
+    // Cubre casos donde Gemini agrega texto antes/después
     const inicio = texto.indexOf("{");
     const fin    = texto.lastIndexOf("}");
-    if (inicio === -1 || fin === -1) return null;
-    return JSON.parse(texto.slice(inicio, fin + 1));
-  } catch (e) {
-    return null;
-  }
+    if (inicio !== -1 && fin !== -1 && fin > inicio) {
+      return JSON.parse(texto.slice(inicio, fin + 1));
+    }
+  } catch (e2) {}
+  try {
+    // Intento 3: remover bloques markdown ```json ... ```
+    const sinMarkdown = texto.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
+    const inicio = sinMarkdown.indexOf("{");
+    const fin    = sinMarkdown.lastIndexOf("}");
+    if (inicio !== -1 && fin !== -1 && fin > inicio) {
+      return JSON.parse(sinMarkdown.slice(inicio, fin + 1));
+    }
+  } catch (e3) {}
+  return null;
 }
 
 // ── GOOGLE SHEETS ───────────────────────────────────────────
