@@ -20,7 +20,7 @@ const GOOGLE_PRIVATE_KEY           = process.env.GOOGLE_PRIVATE_KEY
 // ── HEALTH CHECK ────────────────────────────────────────────
 
 app.get("/", (req, res) => {
-  res.send("Problema Cero API v2.2 activa");
+  res.send("Problema Cero API v2.3 activa");
 });
 
 // ── GEMINI: SOLO REDACTA ────────────────────────────────────
@@ -47,6 +47,21 @@ async function llamarGemini(prompt) {
     || "No se pudo generar respuesta.";
 }
 
+// ── EXTRAER JSON DE RESPUESTA DE GEMINI ─────────────────────
+// Gemini a veces agrega texto antes/después del JSON.
+// Esta función extrae solo el objeto JSON válido.
+
+function extraerJSON(texto) {
+  try {
+    const inicio = texto.indexOf("{");
+    const fin    = texto.lastIndexOf("}");
+    if (inicio === -1 || fin === -1) return null;
+    return JSON.parse(texto.slice(inicio, fin + 1));
+  } catch (e) {
+    return null;
+  }
+}
+
 // ── GOOGLE SHEETS ───────────────────────────────────────────
 
 async function guardarEnSheets(datos) {
@@ -64,7 +79,7 @@ async function guardarEnSheets(datos) {
 
   await sheets.spreadsheets.values.append({
     spreadsheetId: GOOGLE_SHEET_ID,
-    range: "Hoja 1!A:L",
+    range: "Hoja 1!A:M",
     valueInputOption: "USER_ENTERED",
     requestBody: {
       values: [[
@@ -79,7 +94,8 @@ async function guardarEnSheets(datos) {
         datos.feedback1          || "",
         datos.feedback2          || "",
         datos.feedback3          || "",
-        datos.analisisCompleto   || ""
+        datos.analisisCompleto   || "",
+        datos.arraysEstructurados || ""
       ]]
     }
   });
@@ -248,82 +264,75 @@ REGLA DE VOCABULARIO:
 - PROHIBIDO: tono de gurú, motivacional o genérico
 - PERMITIDO: español rioplatense natural, directo y de alto valor
 
-REGLAS DE FORMATO:
-- Párrafos de 1 a 3 líneas.
-- Viñetas (-) siempre que sea posible.
-- MANTENÉ LOS TÍTULOS EXACTOS con sus emojis.
+INSTRUCCIÓN CRÍTICA DE FORMATO:
+Devolvé ÚNICAMENTE un objeto JSON válido.
+Sin texto antes ni después. Sin markdown. Sin bloques de código.
 
-FORMATO OBLIGATORIO:
+{
+  "textoNarrativo": "todas las secciones narrativas aquí con sus títulos y separadores",
+  "plan7Dias": [
+    {"dia": 1, "accion": "texto"},
+    {"dia": 2, "accion": "texto"},
+    {"dia": 3, "accion": "texto"},
+    {"dia": 4, "accion": "texto"},
+    {"dia": 5, "accion": "texto"},
+    {"dia": 6, "accion": "texto"},
+    {"dia": 7, "accion": "texto"}
+  ],
+  "plan30Dias": [
+    {"semana": 1, "objetivo": "texto", "accion": "texto"},
+    {"semana": 2, "objetivo": "texto", "accion": "texto"},
+    {"semana": 3, "objetivo": "texto", "accion": "texto"},
+    {"semana": 4, "objetivo": "texto", "accion": "texto"}
+  ],
+  "contenidos": [
+    {"numero": 1, "gancho": "texto", "tema": "texto", "objetivo": "texto"},
+    {"numero": 2, "gancho": "texto", "tema": "texto", "objetivo": "texto"},
+    {"numero": 3, "gancho": "texto", "tema": "texto", "objetivo": "texto"},
+    {"numero": 4, "gancho": "texto", "tema": "texto", "objetivo": "texto"},
+    {"numero": 5, "gancho": "texto", "tema": "texto", "objetivo": "texto"}
+  ],
+  "escenarios": [
+    {"condicion": "texto", "accion": "texto"},
+    {"condicion": "texto", "accion": "texto"},
+    {"condicion": "texto", "accion": "texto"}
+  ],
+  "mensajes": [
+    {"numero": 1, "texto": "texto"},
+    {"numero": 2, "texto": "texto"},
+    {"numero": 3, "texto": "texto"}
+  ]
+}
 
-━━━━━━━━━━━━━━━━━━━━
+CONTENIDO DE textoNarrativo — incluir en este orden:
 
 🧭 MAPA EJECUTIVO
 
-En 4 a 6 viñetas: bloqueo confirmado, qué consume energía, qué corregir primero, resultado a buscar.
+4 a 6 viñetas: bloqueo confirmado, qué consume energía, qué corregir primero, resultado a buscar.
 
 ━━━━━━━━━━━━━━━━━━━━
 
 🎯 PRIORIDAD ABSOLUTA
 
-UNA prioridad. Qué corregir, por qué va primero, qué pasa si lo sigue postergando.
+Una prioridad. Qué corregir, por qué va primero, qué pasa si lo sigue postergando.
 
 ━━━━━━━━━━━━━━━━━━━━
 
 🛑 QUÉ DEJAR DE HACER YA
 
-De 3 a 5 cosas concretas (viñetas). Sin generalidades.
+3 a 5 cosas concretas en viñetas.
 
 ━━━━━━━━━━━━━━━━━━━━
 
 🔧 QUÉ CORREGIR PRIMERO
 
-De 3 a 5 correcciones. Cada una: qué cambiar, cómo, para qué.
-
-━━━━━━━━━━━━━━━━━━━━
-
-📅 PLAN DE ACCIÓN — PRÓXIMOS 7 DÍAS
-
-- **Día 1:** [Acción]
-- **Día 2:** [Acción]
-- **Día 3:** [Acción]
-- **Día 4:** [Acción]
-- **Día 5:** [Acción]
-- **Día 6:** [Acción]
-- **Día 7:** [Acción]
-
-━━━━━━━━━━━━━━━━━━━━
-
-📆 PLAN DE ACCIÓN — PRÓXIMOS 30 DÍAS
-
-- **Semana 1:** [Objetivo y Acción]
-- **Semana 2:** [Objetivo y Acción]
-- **Semana 3:** [Objetivo y Acción]
-- **Semana 4:** [Objetivo y Acción]
-
-━━━━━━━━━━━━━━━━━━━━
-
-📌 CONTENIDO QUE DEBERÍA CREAR
-
-5 ideas aplicadas al rubro. Cada una con Gancho, Tema y Objetivo.
-
-━━━━━━━━━━━━━━━━━━━━
-
-💬 MENSAJES DE VENTA LISTOS PARA USAR
-
-3 mensajes concretos, humanos, aplicados al negocio.
+3 a 5 correcciones. Cada una: qué cambiar, cómo, para qué.
 
 ━━━━━━━━━━━━━━━━━━━━
 
 📊 MÉTRICA QUE DEBERÍA MIRAR
 
-1 a 3 métricas. Para cada una: qué mirar, por qué importa, qué decisión tomar.
-
-━━━━━━━━━━━━━━━━━━━━
-
-⚠️ SI / ENTONCES
-
-3 reglas de decisión:
-- **Si** pasa X, **entonces** hacer Y.
+1 a 3 métricas. Qué mirar, por qué importa, qué decisión tomar.
 
 ━━━━━━━━━━━━━━━━━━━━
 
@@ -356,10 +365,6 @@ app.post("/api/diagnostico", async (req, res) => {
       textoConsulta.toUpperCase().includes("ANÁLISIS COMPLETO");
 
     // ── PASO 1: LOS MOTORES CALCULAN ──────────────────────
-    // El texto del formulario entra al motorDiagnostico.
-    // El motorInterprete lo traduce a evidencias.
-    // Los demás motores calculan el diagnóstico.
-    // Gemini no decide nada.
     const diagnostico = motorDiagnostico(textoConsulta);
 
     // ── PASO 2: GEMINI SOLO REDACTA ───────────────────────
@@ -369,10 +374,32 @@ app.post("/api/diagnostico", async (req, res) => {
 
     const respuestaGemini = await llamarGemini(prompt);
 
-    // ── PASO 3: CTA PARA DIAGNÓSTICO INICIAL ──────────────
-    let cierre = "";
-    if (!esAnalisisCompleto) {
-      cierre = `
+    // ── PASO 3: PROCESAR RESPUESTA ─────────────────────────
+    let resultadoFinal;
+    let plan7Dias  = [];
+    let plan30Dias = [];
+    let contenidos = [];
+    let escenarios = [];
+    let mensajes   = [];
+
+    if (esAnalisisCompleto) {
+      const jsonExtraido = extraerJSON(respuestaGemini);
+      if (jsonExtraido && jsonExtraido.textoNarrativo) {
+        resultadoFinal = jsonExtraido.textoNarrativo;
+        plan7Dias  = Array.isArray(jsonExtraido.plan7Dias)  ? jsonExtraido.plan7Dias  : [];
+        plan30Dias = Array.isArray(jsonExtraido.plan30Dias) ? jsonExtraido.plan30Dias : [];
+        contenidos = Array.isArray(jsonExtraido.contenidos) ? jsonExtraido.contenidos : [];
+        escenarios = Array.isArray(jsonExtraido.escenarios) ? jsonExtraido.escenarios : [];
+        mensajes   = Array.isArray(jsonExtraido.mensajes)   ? jsonExtraido.mensajes   : [];
+        console.log("✅ JSON estructurado OK");
+      } else {
+        // FALLBACK — Gemini no devolvió JSON válido, usar texto completo
+        resultadoFinal = respuestaGemini;
+        console.warn("⚠️ Fallback activo: Gemini no devolvió JSON válido");
+      }
+    } else {
+      // Diagnóstico inicial — flujo sin cambios
+      const cierre = `
 
 ━━━━━━━━━━━━━━━━━━━━
 
@@ -391,32 +418,38 @@ Volvé a la pestaña de la web (problemacero.com.ar) y tocá el botón naranja p
 No es más información.
 Es dirección clara.
 `;
+      resultadoFinal = respuestaGemini + cierre;
     }
-
-    const resultadoFinal = respuestaGemini + cierre;
 
     // ── PASO 4: GUARDAR EN SHEETS ─────────────────────────
     try {
+      const arraysEstructurados = esAnalisisCompleto && plan7Dias.length
+        ? JSON.stringify({ plan7Dias, plan30Dias, contenidos, escenarios, mensajes })
+        : "";
+
       await guardarEnSheets({
         userId,
-        tipo:               esAnalisisCompleto ? "analisis_completo" : "diagnostico_inicial",
-        consultaOriginal:   textoConsulta,
-        diagnosticoInicial: esAnalisisCompleto ? "" : resultadoFinal,
-        respuesta1:         respuesta1  || "",
-        respuesta2:         respuesta2  || "",
-        respuesta3:         respuesta3  || "",
-        feedback1:          feedback1   || "",
-        feedback2:          feedback2   || "",
-        feedback3:          feedback3   || "",
-        analisisCompleto:   esAnalisisCompleto ? resultadoFinal : ""
+        tipo:                 esAnalisisCompleto ? "analisis_completo" : "diagnostico_inicial",
+        consultaOriginal:     textoConsulta,
+        diagnosticoInicial:   esAnalisisCompleto ? "" : resultadoFinal,
+        respuesta1:           respuesta1  || "",
+        respuesta2:           respuesta2  || "",
+        respuesta3:           respuesta3  || "",
+        feedback1:            feedback1   || "",
+        feedback2:            feedback2   || "",
+        feedback3:            feedback3   || "",
+        analisisCompleto:     esAnalisisCompleto ? resultadoFinal : "",
+        arraysEstructurados
       });
     } catch (sheetError) {
       console.error("Error guardando en Sheets:", sheetError.message);
     }
 
+    // ── PASO 5: RESPUESTA ──────────────────────────────────
     res.json({
       ok:          true,
-      diagnostico: resultadoFinal
+      diagnostico: resultadoFinal,
+      ...(esAnalisisCompleto && { plan7Dias, plan30Dias, contenidos, escenarios, mensajes })
     });
 
   } catch (error) {
@@ -433,13 +466,14 @@ Es dirección clara.
 app.get("/api/test-sheets", async (req, res) => {
   try {
     await guardarEnSheets({
-      userId:             "test_render",
-      tipo:               "test",
-      consultaOriginal:   "Prueba técnica desde Render",
-      diagnosticoInicial: "Si aparece esta fila, Google Sheets está conectado correctamente.",
+      userId:               "test_render",
+      tipo:                 "test",
+      consultaOriginal:     "Prueba técnica desde Render",
+      diagnosticoInicial:   "Si aparece esta fila, Google Sheets está conectado correctamente.",
       respuesta1: "", respuesta2: "", respuesta3: "",
       feedback1:  "", feedback2:  "", feedback3:  "",
-      analisisCompleto: "Prueba"
+      analisisCompleto:     "Prueba",
+      arraysEstructurados:  ""
     });
     res.json({ ok: true, mensaje: "Guardado confirmado en Google Sheets" });
   } catch (error) {
@@ -497,5 +531,5 @@ EL OBJETIVO A 90 DÍAS:
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
-  console.log(`Problema Cero v2.2 activo en puerto ${PORT}`);
+  console.log(`Problema Cero v2.3 activo en puerto ${PORT}`);
 });
