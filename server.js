@@ -413,6 +413,9 @@ Pero el cambio aparece cuando sabés:
 - qué dejar de hacer
 - cómo ordenar los próximos pasos sin seguir probando cosas al azar.
 
+**TU PRÓXIMO PASO:**
+Volvé a la pestaña de la web (problemacero.com.ar) y tocá el botón naranja para desbloquear tu Análisis Completo ahora mismo.
+
 No es más información. Es dirección clara.
 `;
       resultadoFinal = respuestaGemini + cierre;
