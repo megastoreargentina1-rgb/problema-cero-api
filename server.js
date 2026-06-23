@@ -6,7 +6,6 @@ require("dotenv").config();
 const motorDiagnostico = require("./motores/motorDiagnostico");
 
 const app = express();
-
 app.use(cors());
 app.use(express.json({ limit: "10mb" }));
 
@@ -17,13 +16,9 @@ const GOOGLE_PRIVATE_KEY           = process.env.GOOGLE_PRIVATE_KEY
   ? process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, "\n")
   : null;
 
-// ── HEALTH CHECK ────────────────────────────────────────────
-
 app.get("/", (req, res) => {
-  res.send("Problema Cero API v2.4 activa");
+  res.send("Problema Cero API v2.5 activa");
 });
-
-// ── GEMINI: SOLO REDACTA ────────────────────────────────────
 
 async function llamarGemini(prompt, intentos = 3) {
   for (let i = 0; i < intentos; i++) {
@@ -33,115 +28,77 @@ async function llamarGemini(prompt, intentos = 3) {
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }]
-          })
+          body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
         }
       );
-
       const data = await aiRes.json();
-
       if (data.error) {
         const codigo = data.error.code || 0;
         if (codigo === 503 && i < intentos - 1) {
-          console.warn(`⚠️ Gemini 503 — reintento ${i + 1}/${intentos - 1}`);
+          console.warn(`⚠️ Gemini 503 — reintento ${i + 1}`);
           await new Promise(r => setTimeout(r, 3000));
           continue;
         }
         throw new Error(JSON.stringify(data.error));
       }
-
-      return data?.candidates?.[0]?.content?.parts?.[0]?.text
-        || "No se pudo generar respuesta.";
-
+      return data?.candidates?.[0]?.content?.parts?.[0]?.text || "No se pudo generar respuesta.";
     } catch (err) {
       if (i < intentos - 1) {
         console.warn(`⚠️ Error Gemini — reintento ${i + 1}: ${err.message}`);
         await new Promise(r => setTimeout(r, 2000));
-      } else {
-        throw err;
-      }
+      } else { throw err; }
     }
   }
 }
 
-// ── EXTRAER JSON DE RESPUESTA DE GEMINI ─────────────────────
-
 function extraerJSON(texto) {
   if (!texto) return null;
+  try { return JSON.parse(texto.trim()); } catch (e1) {}
   try {
-    return JSON.parse(texto.trim());
-  } catch (e1) {}
-  try {
-    const inicio = texto.indexOf("{");
-    const fin    = texto.lastIndexOf("}");
-    if (inicio !== -1 && fin !== -1 && fin > inicio) {
-      return JSON.parse(texto.slice(inicio, fin + 1));
-    }
+    const inicio = texto.indexOf("{"); const fin = texto.lastIndexOf("}");
+    if (inicio !== -1 && fin !== -1 && fin > inicio) return JSON.parse(texto.slice(inicio, fin + 1));
   } catch (e2) {}
   try {
-    const sinMarkdown = texto.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
-    const inicio = sinMarkdown.indexOf("{");
-    const fin    = sinMarkdown.lastIndexOf("}");
-    if (inicio !== -1 && fin !== -1 && fin > inicio) {
-      return JSON.parse(sinMarkdown.slice(inicio, fin + 1));
-    }
+    const sinMd = texto.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
+    const inicio = sinMd.indexOf("{"); const fin = sinMd.lastIndexOf("}");
+    if (inicio !== -1 && fin !== -1 && fin > inicio) return JSON.parse(sinMd.slice(inicio, fin + 1));
   } catch (e3) {}
   return null;
 }
 
-// ── GOOGLE SHEETS ───────────────────────────────────────────
-
 async function guardarEnSheets(datos) {
-  if (!GOOGLE_SHEET_ID)               throw new Error("Falta GOOGLE_SHEET_ID en Render.");
-  if (!GOOGLE_SERVICE_ACCOUNT_EMAIL)  throw new Error("Falta GOOGLE_SERVICE_ACCOUNT_EMAIL en Render.");
-  if (!GOOGLE_PRIVATE_KEY)            throw new Error("Falta GOOGLE_PRIVATE_KEY en Render.");
-
+  if (!GOOGLE_SHEET_ID)               throw new Error("Falta GOOGLE_SHEET_ID.");
+  if (!GOOGLE_SERVICE_ACCOUNT_EMAIL)  throw new Error("Falta GOOGLE_SERVICE_ACCOUNT_EMAIL.");
+  if (!GOOGLE_PRIVATE_KEY)            throw new Error("Falta GOOGLE_PRIVATE_KEY.");
   const auth = new google.auth.JWT({
-    email:  GOOGLE_SERVICE_ACCOUNT_EMAIL,
-    key:    GOOGLE_PRIVATE_KEY,
+    email: GOOGLE_SERVICE_ACCOUNT_EMAIL, key: GOOGLE_PRIVATE_KEY,
     scopes: ["https://www.googleapis.com/auth/spreadsheets"]
   });
-
   const sheets = google.sheets({ version: "v4", auth });
-
   await sheets.spreadsheets.values.append({
-    spreadsheetId: GOOGLE_SHEET_ID,
-    range: "Hoja 1!A:M",
+    spreadsheetId: GOOGLE_SHEET_ID, range: "Hoja 1!A:M",
     valueInputOption: "USER_ENTERED",
-    requestBody: {
-      values: [[
-        new Date().toLocaleString("es-AR"),
-        datos.userId             || "",
-        datos.tipo               || "",
-        datos.consultaOriginal   || "",
-        datos.diagnosticoInicial || "",
-        datos.respuesta1         || "",
-        datos.respuesta2         || "",
-        datos.respuesta3         || "",
-        datos.feedback1          || "",
-        datos.feedback2          || "",
-        datos.feedback3          || "",
-        datos.analisisCompleto   || "",
-        datos.arraysEstructurados || ""
-      ]]
-    }
+    requestBody: { values: [[
+      new Date().toLocaleString("es-AR"),
+      datos.userId || "", datos.tipo || "", datos.consultaOriginal || "",
+      datos.diagnosticoInicial || "", datos.respuesta1 || "", datos.respuesta2 || "",
+      datos.respuesta3 || "", datos.feedback1 || "", datos.feedback2 || "",
+      datos.feedback3 || "", datos.analisisCompleto || "", datos.arraysEstructurados || ""
+    ]] }
   });
-
   return true;
 }
 
-// ── PROMPTS PARA GEMINI ─────────────────────────────────────
+// ── PROMPT DIAGNÓSTICO INICIAL ───────────────────────────────
 
 function crearPromptDiagnostico(diagnostico, consultaOriginal) {
-
-  const bloqueoPrincipal   = diagnostico.bloqueoPrincipal  || "No identificado";
-  const bloqueoSecundario  = diagnostico.bloqueoSecundario || "No identificado";
-  const causaRaizNombre    = diagnostico.causaRaiz?.causaRaiz || "No determinada";
-  const estadoCausa        = diagnostico.causaRaiz?.estado    || "";
-  const autorizada         = diagnostico.causaRaiz?.autorizada;
-  const prioridad1         = diagnostico.prioridades?.[0];
-  const madurez            = diagnostico.madurez;
+  const bloqueoPrincipal  = diagnostico.bloqueoPrincipal  || "No identificado";
+  const bloqueoSecundario = diagnostico.bloqueoSecundario || "No identificado";
+  const causaRaizNombre   = diagnostico.causaRaiz?.causaRaiz || "No determinada";
+  const estadoCausa       = diagnostico.causaRaiz?.estado    || "";
+  const autorizada        = diagnostico.causaRaiz?.autorizada;
+  const prioridad1        = diagnostico.prioridades?.[0];
+  const madurez           = diagnostico.madurez;
 
   const reglaCerteza = autorizada
     ? 'El diagnóstico tiene suficiente evidencia. Podés afirmar "El problema principal es..."'
@@ -184,7 +141,7 @@ IDENTIDAD:
 - Hablás en español rioplatense natural. No usás "usted".
 
 REGLA DE VOCABULARIO:
-- PROHIBIDO: metáforas médicas o clínicas (hemorragia, síntoma, bisturí, paciente, etc.)
+- PROHIBIDO: metáforas médicas o clínicas
 - PROHIBIDO: tono de gurú, motivacional o genérico
 - PROHIBIDO: frases vacías como "¡Excelente!" o "Gran pregunta"
 - PERMITIDO: lenguaje empresarial de alta gerencia, directo y humano
@@ -256,8 +213,9 @@ El sistema se encarga del siguiente paso por fuera del diagnóstico.
 `;
 }
 
-function crearPromptAnalisisCompleto(diagnostico, consultaOriginal) {
+// ── PROMPT ANÁLISIS COMPLETO ─────────────────────────────────
 
+function crearPromptAnalisisCompleto(diagnostico, consultaOriginal) {
   const bloqueoPrincipal  = diagnostico.bloqueoPrincipal  || "No identificado";
   const bloqueoSecundario = diagnostico.bloqueoSecundario || "No identificado";
   const causaRaizNombre   = diagnostico.causaRaiz?.causaRaiz || "No determinada";
@@ -293,6 +251,37 @@ REGLA DE VOCABULARIO:
 - PROHIBIDO: metáforas médicas o clínicas
 - PROHIBIDO: tono de gurú, motivacional o genérico
 - PERMITIDO: español rioplatense natural, directo y de alto valor
+
+━━━━━━━━━━━━━━━━━━━━
+REGLA DE UNIVERSALIDAD — CRÍTICA
+━━━━━━━━━━━━━━━━━━━━
+
+Este sistema atiende todo tipo de negocios. El plan SIEMPRE se adapta
+al canal y contexto real del usuario, no al canal más popular o más fácil.
+
+PERFILES QUE PODÉS RECIBIR — adaptá el plan a cada uno:
+1. Servicios de belleza (uñas, peluquería, estética) → turnos, WhatsApp, boca a boca, Instagram
+2. Gastronomía (resto, delivery, catering, pastelería) → reseñas, delivery apps, local físico, Google Maps
+3. Comercio minorista (ropa, calzado, accesorios) → local físico, Mercado Libre, redes, vidrieras
+4. Servicios profesionales (contadores, abogados, psicólogos, arquitectos) → LinkedIn, referencias, web, email
+5. Construcción y oficios (plomeros, electricistas, albañiles, carpinteros) → WhatsApp, recomendaciones, grupos de vecinos
+6. Educación y formación (profesores, coaches, cursos, tutorías) → Zoom, YouTube, email, comunidades
+7. Salud y bienestar (nutricionistas, kinesiólogos, yoga, meditación) → turnos, consultorio, Instagram, referencias médicas
+8. Tecnología y freelance (diseñadores, programadores, marketers, redactores) → portafolios, LinkedIn, Upwork, clientes directos
+9. Productos artesanales y manufactura (velas, bijouterie, ropa, muebles) → ferias, Tienda Nube, Instagram, Mercado Libre
+10. Agro, alimentos y distribución (productores, mayoristas, distribuidores) → canales B2B, WhatsApp, ferias, referidos
+
+REGLA ABSOLUTA DE NIVEL:
+- NUNCA bajés el nivel estratégico del plan por las limitaciones declaradas del usuario.
+- Si el usuario dice "no sé de redes", el plan le indica QUÉ aprender, DÓNDE aprenderlo
+  y en QUÉ orden, sin simplificar la estrategia.
+- Si el usuario dice "trabajo solo", el plan contempla eso en la ejecución pero no baja
+  la vara de lo que debe lograr.
+- Si el usuario no tiene presupuesto, el plan prioriza acciones de costo cero primero,
+  pero siempre con estándar profesional.
+- El plan es exigente, concreto y ejecutable. Nunca condescendiente.
+
+━━━━━━━━━━━━━━━━━━━━
 
 INSTRUCCIÓN CRÍTICA DE FORMATO:
 Devolvé ÚNICAMENTE un objeto JSON válido.
@@ -357,12 +346,14 @@ Una prioridad. Qué corregir, por qué va primero, qué pasa si lo sigue posterg
 🔧 QUÉ CORREGIR PRIMERO
 
 3 a 5 correcciones. Cada una: qué cambiar, cómo, para qué.
+Adaptadas al tipo de negocio y canal real del usuario.
 
 ━━━━━━━━━━━━━━━━━━━━
 
 📊 MÉTRICA QUE DEBERÍA MIRAR
 
 1 a 3 métricas. Qué mirar, por qué importa, qué decisión tomar.
+Las métricas deben ser relevantes para el canal real del negocio.
 
 ━━━━━━━━━━━━━━━━━━━━
 
@@ -372,57 +363,29 @@ Cierre breve, humano y firme. Sin motivación. Con dirección.
 `;
 }
 
-// ── ENDPOINT PRINCIPAL ──────────────────────────────────────
+// ── ENDPOINT PRINCIPAL ───────────────────────────────────────
 
 app.post("/api/diagnostico", async (req, res) => {
   try {
-    const {
-      problem,
-      userId,
-      consultaOriginal,
-      respuesta1,
-      respuesta2,
-      respuesta3,
-      feedback1,
-      feedback2,
-      feedback3
-    } = req.body;
-
+    const { problem, userId, consultaOriginal, respuesta1, respuesta2, respuesta3, feedback1, feedback2, feedback3 } = req.body;
     const textoConsulta = consultaOriginal || problem || "";
+    const esAnalisisCompleto = typeof textoConsulta === "string" && textoConsulta.toUpperCase().includes("ANÁLISIS COMPLETO");
 
-    const esAnalisisCompleto =
-      typeof textoConsulta === "string" &&
-      textoConsulta.toUpperCase().includes("ANÁLISIS COMPLETO");
-
-    // ── PASO 1: LOS MOTORES CALCULAN ──────────────────────
     const diagnostico = motorDiagnostico(textoConsulta);
-
-    // ── PASO 2: GEMINI SOLO REDACTA ───────────────────────
     const prompt = esAnalisisCompleto
       ? crearPromptAnalisisCompleto(diagnostico, textoConsulta)
       : crearPromptDiagnostico(diagnostico, textoConsulta);
 
     const respuestaGemini = await llamarGemini(prompt);
 
-    // ── PASO 3: PROCESAR RESPUESTA ─────────────────────────
     let resultadoFinal;
-    let plan7Dias  = [];
-    let plan30Dias = [];
-    let contenidos = [];
-    let escenarios = [];
-    let mensajes   = [];
+    let plan7Dias = [], plan30Dias = [], contenidos = [], escenarios = [], mensajes = [];
 
     if (esAnalisisCompleto) {
-      console.log("=== DIAGNÓSTICO GEMINI ===");
+      console.log("=== ANÁLISIS COMPLETO ===");
       console.log("PRIMEROS 300 CHARS:", respuestaGemini.slice(0, 300));
-
       const jsonExtraido = extraerJSON(respuestaGemini);
-
-      console.log("JSON EXTRAIDO OK:", !!jsonExtraido);
-      console.log("TIENE textoNarrativo:", !!jsonExtraido?.textoNarrativo);
-      console.log("PRIMEROS 100 DE textoNarrativo:", jsonExtraido?.textoNarrativo?.slice(0, 100) || "UNDEFINED");
-      console.log("plan7Dias es array:", Array.isArray(jsonExtraido?.plan7Dias));
-      console.log("plan7Dias length:", jsonExtraido?.plan7Dias?.length || 0);
+      console.log("JSON OK:", !!jsonExtraido, "| textoNarrativo:", !!jsonExtraido?.textoNarrativo);
       console.log("=========================");
 
       if (jsonExtraido && jsonExtraido.textoNarrativo) {
@@ -432,13 +395,11 @@ app.post("/api/diagnostico", async (req, res) => {
         contenidos = Array.isArray(jsonExtraido.contenidos) ? jsonExtraido.contenidos : [];
         escenarios = Array.isArray(jsonExtraido.escenarios) ? jsonExtraido.escenarios : [];
         mensajes   = Array.isArray(jsonExtraido.mensajes)   ? jsonExtraido.mensajes   : [];
-        console.log("✅ JSON estructurado OK — textoNarrativo extraído");
       } else {
         resultadoFinal = respuestaGemini;
-        console.warn("⚠️ Fallback activo — causa: jsonExtraido=" + !!jsonExtraido + " textoNarrativo=" + !!jsonExtraido?.textoNarrativo);
+        console.warn("⚠️ Fallback activo");
       }
     } else {
-      // Diagnóstico inicial — cierre limpio sin preguntas
       const cierre = `
 
 ━━━━━━━━━━━━━━━━━━━━
@@ -457,115 +418,65 @@ No es más información. Es dirección clara.
       resultadoFinal = respuestaGemini + cierre;
     }
 
-    // ── PASO 4: GUARDAR EN SHEETS ─────────────────────────
     try {
       const arraysEstructurados = esAnalisisCompleto && plan7Dias.length
-        ? JSON.stringify({ plan7Dias, plan30Dias, contenidos, escenarios, mensajes })
-        : "";
-
+        ? JSON.stringify({ plan7Dias, plan30Dias, contenidos, escenarios, mensajes }) : "";
       await guardarEnSheets({
-        userId,
-        tipo:                 esAnalisisCompleto ? "analisis_completo" : "diagnostico_inicial",
-        consultaOriginal:     textoConsulta,
-        diagnosticoInicial:   esAnalisisCompleto ? "" : resultadoFinal,
-        respuesta1:           respuesta1  || "",
-        respuesta2:           respuesta2  || "",
-        respuesta3:           respuesta3  || "",
-        feedback1:            feedback1   || "",
-        feedback2:            feedback2   || "",
-        feedback3:            feedback3   || "",
-        analisisCompleto:     esAnalisisCompleto ? resultadoFinal : "",
-        arraysEstructurados
+        userId, tipo: esAnalisisCompleto ? "analisis_completo" : "diagnostico_inicial",
+        consultaOriginal: textoConsulta,
+        diagnosticoInicial: esAnalisisCompleto ? "" : resultadoFinal,
+        respuesta1: respuesta1||"", respuesta2: respuesta2||"", respuesta3: respuesta3||"",
+        feedback1: feedback1||"", feedback2: feedback2||"", feedback3: feedback3||"",
+        analisisCompleto: esAnalisisCompleto ? resultadoFinal : "", arraysEstructurados
       });
-    } catch (sheetError) {
-      console.error("Error guardando en Sheets:", sheetError.message);
-    }
+    } catch (sheetError) { console.error("Error Sheets:", sheetError.message); }
 
-    // ── PASO 5: RESPUESTA ──────────────────────────────────
     res.json({
-      ok:          true,
+      ok: true,
       diagnostico: resultadoFinal,
       ...(esAnalisisCompleto && { plan7Dias, plan30Dias, contenidos, escenarios, mensajes })
     });
 
   } catch (error) {
     console.error("Error diagnóstico:", error);
-    res.status(500).json({
-      error:   "Error diagnóstico",
-      detalle: error.message
-    });
+    res.status(500).json({ error: "Error diagnóstico", detalle: error.message });
   }
 });
 
-// ── ENDPOINTS DE DEBUG ──────────────────────────────────────
+// ── ENDPOINTS DE DEBUG ───────────────────────────────────────
 
 app.get("/api/test-sheets", async (req, res) => {
   try {
     await guardarEnSheets({
-      userId:               "test_render",
-      tipo:                 "test",
-      consultaOriginal:     "Prueba técnica desde Render",
-      diagnosticoInicial:   "Si aparece esta fila, Google Sheets está conectado correctamente.",
-      respuesta1: "", respuesta2: "", respuesta3: "",
-      feedback1:  "", feedback2:  "", feedback3:  "",
-      analisisCompleto:     "Prueba",
-      arraysEstructurados:  ""
+      userId: "test_render", tipo: "test",
+      consultaOriginal: "Prueba técnica desde Render",
+      diagnosticoInicial: "Conexión OK.",
+      respuesta1:"", respuesta2:"", respuesta3:"",
+      feedback1:"", feedback2:"", feedback3:"",
+      analisisCompleto: "Prueba", arraysEstructurados: ""
     });
     res.json({ ok: true, mensaje: "Guardado confirmado en Google Sheets" });
-  } catch (error) {
-    res.status(500).json({ ok: false, mensaje: "NO se pudo guardar", error: error.message });
-  }
+  } catch (error) { res.status(500).json({ ok: false, error: error.message }); }
 });
 
 app.get("/api/debug-env", (req, res) => {
   res.json({
-    geminiApiKey:              GEMINI_API_KEY               ? "OK" : "FALTA",
-    sheetId:                   GOOGLE_SHEET_ID              ? "OK" : "FALTA",
-    serviceEmail:              GOOGLE_SERVICE_ACCOUNT_EMAIL ? "OK" : "FALTA",
-    privateKey:                GOOGLE_PRIVATE_KEY           ? "OK" : "FALTA",
-    privateKeyStartsCorrectly: GOOGLE_PRIVATE_KEY
-      ? GOOGLE_PRIVATE_KEY.startsWith("-----BEGIN PRIVATE KEY-----")
-      : false,
-    privateKeyEndsCorrectly: GOOGLE_PRIVATE_KEY
-      ? GOOGLE_PRIVATE_KEY.trim().endsWith("-----END PRIVATE KEY-----")
-      : false
+    geminiApiKey: GEMINI_API_KEY ? "OK" : "FALTA",
+    sheetId: GOOGLE_SHEET_ID ? "OK" : "FALTA",
+    serviceEmail: GOOGLE_SERVICE_ACCOUNT_EMAIL ? "OK" : "FALTA",
+    privateKey: GOOGLE_PRIVATE_KEY ? "OK" : "FALTA",
+    privateKeyStartsCorrectly: GOOGLE_PRIVATE_KEY ? GOOGLE_PRIVATE_KEY.startsWith("-----BEGIN PRIVATE KEY-----") : false,
+    privateKeyEndsCorrectly: GOOGLE_PRIVATE_KEY ? GOOGLE_PRIVATE_KEY.trim().endsWith("-----END PRIVATE KEY-----") : false
   });
 });
 
 app.get("/api/debug-motores", (req, res) => {
   try {
-    const textoTest = `EL NEGOCIO:
-1. Vendo ropa urbana.
-2. Apunto a jóvenes de 18 a 30 años.
-3. Arranqué hace 1 año.
-
-EL PROBLEMA ELEGIDO Y DETALLE:
-1. Opción 1.
-2. Me llegan mensajes preguntando el precio y después no responden más.
-
-LAS BASES DEL NEGOCIO:
-1. Defino precios mirando la competencia.
-2. Solo vendo por Instagram.
-3. Dependo del boca a boca.
-4. Trabajo completamente solo.
-
-EL PUNTO DE BLOQUEO:
-1. Opción 2. Tengo consultas pero no logro cerrar las ventas.
-
-EL OBJETIVO A 90 DÍAS:
-1. Quiero tener 5 clientes fijos por mes sin competir por precio.`;
-
+    const textoTest = `EL NEGOCIO:\n1. Vendo ropa urbana.\n2. Apunto a jóvenes de 18 a 30 años.\n3. Arranqué hace 1 año.\n\nEL PROBLEMA ELEGIDO Y DETALLE:\n1. Opción 1.\n2. Me llegan mensajes preguntando el precio y después no responden más.\n\nLAS BASES DEL NEGOCIO:\n1. Defino precios mirando la competencia.\n2. Solo vendo por Instagram.\n3. Dependo del boca a boca.\n4. Trabajo completamente solo.\n\nEL PUNTO DE BLOQUEO:\n1. Opción 2.\n\nEL OBJETIVO A 90 DÍAS:\n1. Quiero tener 5 clientes fijos por mes.`;
     const resultado = motorDiagnostico(textoTest);
     res.json({ ok: true, diagnostico: resultado });
-  } catch (error) {
-    res.status(500).json({ ok: false, error: error.message });
-  }
+  } catch (error) { res.status(500).json({ ok: false, error: error.message }); }
 });
-
-// ── ARRANQUE ────────────────────────────────────────────────
 
 const PORT = process.env.PORT || 3000;
-
-app.listen(PORT, () => {
-  console.log(`Problema Cero v2.4 activo en puerto ${PORT}`);
-});
+app.listen(PORT, () => console.log(`Problema Cero v2.5 activo en puerto ${PORT}`));
