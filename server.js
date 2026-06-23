@@ -20,7 +20,7 @@ const GOOGLE_PRIVATE_KEY           = process.env.GOOGLE_PRIVATE_KEY
 // ── HEALTH CHECK ────────────────────────────────────────────
 
 app.get("/", (req, res) => {
-  res.send("Problema Cero API v2.3 activa");
+  res.send("Problema Cero API v2.4 activa");
 });
 
 // ── GEMINI: SOLO REDACTA ────────────────────────────────────
@@ -43,7 +43,6 @@ async function llamarGemini(prompt, intentos = 3) {
 
       if (data.error) {
         const codigo = data.error.code || 0;
-        // Si es 503 (sobrecarga) y quedan intentos, esperar y reintentar
         if (codigo === 503 && i < intentos - 1) {
           console.warn(`⚠️ Gemini 503 — reintento ${i + 1}/${intentos - 1}`);
           await new Promise(r => setTimeout(r, 3000));
@@ -67,18 +66,13 @@ async function llamarGemini(prompt, intentos = 3) {
 }
 
 // ── EXTRAER JSON DE RESPUESTA DE GEMINI ─────────────────────
-// Gemini a veces agrega texto antes/después del JSON.
-// Esta función extrae solo el objeto JSON válido.
 
 function extraerJSON(texto) {
   if (!texto) return null;
   try {
-    // Intento 1: parsear directo
     return JSON.parse(texto.trim());
   } catch (e1) {}
   try {
-    // Intento 2: extraer entre primera { y última }
-    // Cubre casos donde Gemini agrega texto antes/después
     const inicio = texto.indexOf("{");
     const fin    = texto.lastIndexOf("}");
     if (inicio !== -1 && fin !== -1 && fin > inicio) {
@@ -86,7 +80,6 @@ function extraerJSON(texto) {
     }
   } catch (e2) {}
   try {
-    // Intento 3: remover bloques markdown ```json ... ```
     const sinMarkdown = texto.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
     const inicio = sinMarkdown.indexOf("{");
     const fin    = sinMarkdown.lastIndexOf("}");
@@ -139,8 +132,6 @@ async function guardarEnSheets(datos) {
 }
 
 // ── PROMPTS PARA GEMINI ─────────────────────────────────────
-// Gemini NO decide bloqueo ni causa raíz.
-// Recibe el objeto diagnóstico ya calculado y lo redacta.
 
 function crearPromptDiagnostico(diagnostico, consultaOriginal) {
 
@@ -258,6 +249,10 @@ Explicá qué mejorará si aplica la estructura.
 🔥 CIERRE
 
 Cierre breve. Consultor estratégico real. Humano. Preciso. Sin sonar robótico ni motivacional.
+
+IMPORTANTE: Terminá el texto exactamente después del cierre.
+No agregues preguntas, encuestas, ni llamados a la acción.
+El sistema se encarga del siguiente paso por fuera del diagnóstico.
 `;
 }
 
@@ -418,7 +413,6 @@ app.post("/api/diagnostico", async (req, res) => {
     let mensajes   = [];
 
     if (esAnalisisCompleto) {
-      // LOGS DE DIAGNÓSTICO — remover después de confirmar
       console.log("=== DIAGNÓSTICO GEMINI ===");
       console.log("PRIMEROS 300 CHARS:", respuestaGemini.slice(0, 300));
 
@@ -444,7 +438,7 @@ app.post("/api/diagnostico", async (req, res) => {
         console.warn("⚠️ Fallback activo — causa: jsonExtraido=" + !!jsonExtraido + " textoNarrativo=" + !!jsonExtraido?.textoNarrativo);
       }
     } else {
-      // Diagnóstico inicial — flujo sin cambios
+      // Diagnóstico inicial — cierre limpio sin preguntas
       const cierre = `
 
 ━━━━━━━━━━━━━━━━━━━━
@@ -458,11 +452,7 @@ Pero el cambio aparece cuando sabés:
 - qué dejar de hacer
 - cómo ordenar los próximos pasos sin seguir probando cosas al azar.
 
-**TU PRÓXIMO PASO:**
-Volvé a la pestaña de la web (problemacero.com.ar) y tocá el botón naranja para desbloquear tu Análisis Completo ahora mismo.
-
-No es más información.
-Es dirección clara.
+No es más información. Es dirección clara.
 `;
       resultadoFinal = respuestaGemini + cierre;
     }
@@ -577,5 +567,5 @@ EL OBJETIVO A 90 DÍAS:
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
-  console.log(`Problema Cero v2.3 activo en puerto ${PORT}`);
+  console.log(`Problema Cero v2.4 activo en puerto ${PORT}`);
 });
